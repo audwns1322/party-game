@@ -1,0 +1,38 @@
+project_id = "party-game"
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+auto_expose_new_tables = false
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+[db.migrations]
+enabled = true
+schema_paths = []
+[db.seed]
+enabled = false
+[realtime]
+enabled = true
+[studio]
+enabled = false
+[local_smtp]
+enabled = false
+[storage]
+enabled = false
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:5173"
+enable_signup = false
+enable_anonymous_sign_ins = false
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+deno_version = 2
+[analytics]
+enabled = false
+[functions.m0-snapshot]
+verify_jwt = false

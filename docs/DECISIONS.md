@@ -1,0 +1,36 @@
+# 설계 검토 및 결정 — M0
+
+첨부 ZIP에는 PRD와 계획서 2개만 있었으며 모두 읽고 원문을 docs에 보존했다. 문서의 예시·후속 단계 지침은 참고 요구사항으로 다루고, 사용자가 요청한 M0만 구현한다. 기존 저장소는 README 1개, 초기 커밋 b155207, 작업 트리 깨끗함. 체크아웃 브랜치는 플랫폼이 제공한 `work`다. 원격 main을 변경하거나 push하지 않았다.
+
+## 정합성
+
+1. **명백한 오기:** PRD §2.4 마지막의 “시민이 아닌 사람을 지목했다면 라이어 즉시 승리”는 §2, §4의 “라이어 지목 시 GUESS”와 모순이다. 상세 상태 머신을 기준으로 시민 지목 시 라이어 승리, 라이어 지목 시 정답 도전으로 해석한다. M0에는 승패 로직을 구현하지 않는다. M1 진행 확인 시 함께 검토 가능하다.
+2. **토큰과 JWT는 다름:** PRD의 자체 무작위 토큰은 Supabase Auth JWT가 아니다. 해당 Edge Function만 `verify_jwt=false`로 설정하고, 함수 내부에서 Bearer 토큰 형식 → SHA-256 해시 → 방/활성 자격 조회를 반드시 수행한다. 공용 API 키를 참가자 인증으로 사용하지 않는다. 새 함수는 기본 JWT 검증 상태를 별도로 검토한다.
+3. **RLS만으로 충분하지 않음:** service_role은 RLS를 우회한다. 비밀 테이블은 노출되지 않는 `m0_private` 스키마에 두고 anon/authenticated의 스키마·테이블·RPC 권한을 회수한다. Edge는 고정 RPC만 호출하고, RPC가 해시+방+활성 여부를 검증한다. SECURITY DEFINER에는 빈 search_path와 완전 수식 테이블명을 사용한다. 운영에서는 전용 최소 권한 DB 실행 역할도 검토한다.
+4. **공개 Realtime의 신뢰 경계:** public 채널은 악의적 참가자의 위조 이벤트를 배제하지 못한다. 공개 payload는 `{room_id, version}`만 허용하고, 상태 결정·역할 확인·Presence의 진위 판단에 사용하지 않는다. 이벤트는 인증된 HTTP 재조회 힌트일 뿐이다. 운영의 서버 송신 전용 권한/쿼터·재조회 병합·재연결 폴링은 M2/M6에서 검증한다. 비밀은 절대로 Broadcast하지 않는다.
+5. **연결 판정/타이머:** 공개 Presence를 참가자 권위 증명으로 쓰지 않는다. 향후 인증 heartbeat와 서버 시간·DB 트랜잭션이 최종 권위다. Edge 함수 실행을 2시간 유지하거나 JS setTimeout을 운영 스케줄러로 사용하지 않는다.
+6. **M0/M1 경계:** 보안 POC는 m0_private.sessions 한 테이블만 사용한다. 방·회복 코드 발급·회전 API·게임·승점은 아직 구현하지 않았다. 테스트의 SQL 자격 교체는 폐기 자격 차단만 증명한다. M1부터 운영 모델을 별도 마이그레이션으로 작성하고 POC는 운영 배포 전 제거한다.
+7. **M0 완료 조건:** 단위 테스트만으로 보안 완료를 주장하지 않는다. 실제 로컬 Postgres 권한 테스트, Edge HTTP 호출, Realtime 송수신까지 통과해야 한다. 원격 Supabase/Vercel과 실기기 QA는 별도 미검증이다.
+
+## 도구/플랫폼
+
+- Node 24.19.0, npm 11.9.0. 라이브러리는 npm 공식 레지스트리에서 버전 확인 후 exact + package-lock으로 고정했다. 전체 설치 버전은 package.json 참고.
+- CLI 2.121.0은 읽기 전용 홈 디렉터리에서 실패하므로 지원 환경변수 프로젝트 .cache/supabase를 SUPABASE_HOME으로 사용. 기본 ECR이 차단되어 SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io로 공식 이미지 사용. TLS·체크섬 검증 유지.
+- M0 필수 서비스는 Postgres, API gateway/PostgREST, Auth(로컬 스택 의존성), Edge runtime, Realtime. Storage/Studio/SMTP/Analytics는 비활성화. 스택 초기 다운로드는 비용이 크므로 이미지를 재사용한다.
+- 공식 웹사이트 supabase.com/vercel.com은 현재 네트워크 정책 403. 도메인 추가 초안은 저장했으나 런타임 적용/게시와는 다르다.
+
+## 공식 자료 확인 (2026-10-21)
+
+공식 Supabase 저장소의 문서 원본(raw.githubusercontent.com/supabase/supabase/master/apps/docs/content/)을 직접 조회했다. 변경 가능한 최신 문서이며 가격 보장이 아니다.
+
+- [Edge 인증](https://supabase.com/docs/guides/functions/auth), 원본 `guides/functions/auth.mdx`: 자체 인증 함수는 플랫폼 JWT 검사를 해제할 수 있지만 민감 정보 접근 전 함수 내부 인증이 전적으로 필요하다.
+- [Edge 제한](https://supabase.com/docs/guides/functions/limits), 원본 `guides/functions/limits.mdx`: Free worker wall-clock 150초, CPU 2초, 메모리 256MB. 장시간 게임 타이머를 함수 프로세스에 보관하면 안 된다.
+- [Realtime 제한](https://supabase.com/docs/guides/realtime/limits), 원본 `guides/realtime/limits.mdx`: Free 동시 연결 200, 초당 메시지 100, Presence 초당 메시지 20, 클라이언트당 Presence 30초/5회. 12인 단일 방은 연결 한도 내지만 다중 방·재조회·heartbeat 부하는 별도 검증 필요. “200명 서비스 보장”으로 해석하지 않는다.
+- [요금](https://supabase.com/docs/guides/platform/billing-on-supabase), 원본 `guides/platform/billing-on-supabase.mdx`: Free 프로젝트 2개, 조직 단위 사용량. 정확한 현재 가격/프로젝트별 설정은 Dashboard에서 재확인한다.
+- [Vercel Hobby](https://vercel.com/docs/plans/hobby): 사이트 차단으로 현재 세부 쿼터·상업 이용 자격 미검증. 출시 전 공식 정책과 선택 플랜 확인 필수. M0에는 배포하지 않는다.
+
+## 현재 런타임 차단과 대체 검증
+
+Docker daemon의 storage driver가 vfs이며 전체 디스크 32GB다. 공식 Postgres 17.11 이미지(검증된 레지스트리 manifest 기준 29개 레이어, 압축 약 351MB)를 해제할 때 누적 복제로 디스크가 가득 찼다. 설치 프로세스를 중단하자 미완료 레이어가 해제되어 여유 공간 약 21GB로 복구됐다. 서비스는 시작되지 않았고 실행 중 컨테이너는 없다. 다른 작업의 파일/컨테이너를 삭제하지 않았다. DB major 15의 최신 이미지도 유사한 레이어 규모라 근거 없는 다운그레이드는 하지 않는다.
+
+PGlite(임베디드 실제 PostgreSQL/WASM)에 같은 마이그레이션을 적용해 GRANT/REVOKE, RLS 활성화, 실제 서버 핸들러→SQL RPC의 본인 정보/라이어 단어 차단, 자격 교체/폐기 테스트를 추가했다. 이 테스트는 Supabase gateway, Edge 런타임 HTTP, Realtime WebSocket을 검증하지 않는다. 해당 통합은 미완료로 남긴다. Deno CLI로 실제 Edge 진입점 타입 검사도 별도 수행한다.

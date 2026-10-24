@@ -30,7 +30,7 @@ try {
   realtime=createClient(base,key,{auth:{persistSession:false}});const events=[];
   const channel=realtime.channel(`room:${host.data.room_id}`).on('broadcast',{event:'version'},({payload})=>events.push(payload));
   await new Promise((resolve,reject)=>channel.subscribe(s=>{if(s==='SUBSCRIBED')resolve();if(['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(s))reject(Error(s));}));
-  for(const seconds of [0,60]){
+  for(const seconds of [0,60,120]){
     assert.equal((await roomCommand(players[0],'update_settings',{hint_rounds:seconds===0?3:1,discussion_seconds:seconds})).status,200);
     // Keep the bounded fixture group connected before a new round.
     for(const p of players)assert.equal((await roomCommand(p,'heartbeat')).status,200);
@@ -56,7 +56,7 @@ try {
     await delay(1100);assert.equal((await snapshot(players[1])).round.remaining_ms,paused.round.remaining_ms);
     assert.equal((await game(players[0],'resume',{round_id:rid})).status,200);checks++;
     if(seconds===0){assert.equal((await game(players[0],'start_vote',{round_id:rid})).status,200);}
-    else {
+    else if(seconds===60) {
       assert.equal((await game(players[0],'start_vote',{round_id:rid})).status,409);checks++;
       dto=await snapshot(players[0]);
       console.log('Timed discussion: waiting for the real server deadline (60 seconds).');
@@ -64,11 +64,19 @@ try {
       events.length=0;
       const [a,b]=await Promise.all([snapshot(players[0]),snapshot(players[1])]);assert.equal(a.round.phase,'VOTE_1');assert.equal(b.round.phase,'VOTE_1');assert.equal(a.room.version,b.room.version);assert.equal(a.room.version,dto.room.version+1);checks++;
       await delay(800);assert.equal(events.length,1);assert.deepEqual(Object.keys(events[0]).sort(),['room_id','version']);checks++;
+    } else {
+      dto=await snapshot(players[0]);assert.ok(Date.parse(dto.round.deadline_at)>Date.parse(dto.server_now));
+      assert.equal((await game(players[1],'start_vote',{round_id:rid,skip_timer:true})).status,403);checks++;
+      const same={expected_version:dto.room.version,expected_phase:'DISCUSS',request_id:randomUUID()};
+      const payload={round_id:rid,skip_timer:true};
+      const [a,b]=await Promise.all([game(players[0],'start_vote',payload,same),game(players[0],'start_vote',payload,same)]);
+      assert.equal(a.status,200);assert.equal(b.status,200);assert.equal(a.data.version,b.data.version);checks++;
+      const after=await snapshot(players[0]);assert.equal(after.round.phase,'VOTE_1');assert.equal(after.round.deadline_at,null);assert.equal(after.room.version,dto.room.version+1);checks++;
     }
     const snapshots=await Promise.all(players.map(snapshot));assert.ok(snapshots.every(s=>s.round.phase==='VOTE_1'));assert.equal(snapshots.filter(s=>s.round.me.role==='liar'&&s.round.me.word===null).length,1);checks++;
     assert.equal((await game(players[0],'cancel_round')).status,200);
   }
-  console.log(`Remote M3: ${checks} checks passed (3 laps, concurrent replay, speaker/host permissions, pause/resume, unlimited vote, real 60s deadline, one server Broadcast).`);
+  console.log(`Remote M3: ${checks} checks passed (3 laps, concurrent replay, speaker/host permissions, pause/resume, unlimited vote, real 60s deadline, one server Broadcast, host timer skip).`);
 } finally {
   if(realtime)await realtime.removeAllChannels();
   for(const s of rooms){try{assert.equal((await roomCommand(s,'close_room')).status,200);console.log('Disposable M3 room closed.');}catch(error){console.log('Fixture cleanup needs verification: '+error.message);process.exitCode=1;}}

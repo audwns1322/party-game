@@ -30,7 +30,7 @@ const version = async (s: Session) => ((await (await snapshot(s, s.room_id)).jso
 
 beforeAll(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role;');
-  for (const file of ['20261021071859_m0_security_poc.sql', '20261024064956_m1_rooms_players.sql', '20261024080000_m1_hardening.sql', '20261024090000_rate_limits.sql']) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
+  for (const file of ['20261021071859_m0_security_poc.sql', '20261024064956_m1_rooms_players.sql', '20261024075949_m1_hardening.sql', '20261024080006_rate_limits.sql']) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
 }, 30000);
 afterAll(async () => { await db.close(); });
 beforeEach(() => { sent.length = 0; });

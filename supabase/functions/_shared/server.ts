@@ -23,7 +23,9 @@ export const broadcast: Broadcast = async (roomId, version) => {
   if (!response.ok) throw new Error('BROADCAST_FAILED');
 };
 
-const origins = (Deno.env.get('APP_ALLOWED_ORIGINS') ?? 'http://localhost:5173,http://127.0.0.1:5173').split(',');
+// Public origins only (not secrets). APP_ALLOWED_ORIGINS, when set, adds more.
+const DEFAULT_ORIGINS = ['https://party-game-psi-pink.vercel.app', 'http://localhost:5173', 'http://127.0.0.1:5173'];
+const origins = [...DEFAULT_ORIGINS, ...(Deno.env.get('APP_ALLOWED_ORIGINS') ?? '').split(',').map((o) => o.trim()).filter(Boolean)];
 export function serve(handler: (request: Request) => Promise<Response>, methods: string) {
   Deno.serve(withCors(handler, origins, methods));
 }

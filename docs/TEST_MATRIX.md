@@ -58,5 +58,5 @@ Docker overlay2 등 효율적인 저장 드라이버 또는 충분한 디스크�
 | 원격 RPC 동작 | 통과 | 롤백 트랜잭션으로 생성·참가·중복·위조·복구·종료 확인, 잔여 행 0. 보안 advisor는 의도된 deny-all INFO만 |
 | Edge 배포 | 통과 | room-create/join/player-recover/room-snapshot/room-command v1, verify_jwt=false(내부 인증). 배포본 = 브랜치 코드 |
 | 브라우저 흐름 (헤드리스 Chromium, 모바일 뷰포트 3대) | 통과 | 실제 핸들러+마이그레이션 로컬 서버로 생성→복구 코드 표시→참가 2명→중복 닉네임 오류→방장 설정이 손님 화면 반영·손님은 수정 불가→새로고침 자동 복구→다른 기기 복구 후 이전 기기 차단 |
-| 원격 Edge HTTP / Realtime 실송수신 | 미실행 | 클라우드 세션에서 *.supabase.co 직접 요청 차단 |
-| 실기기 3대 (M1 완료 조건) | 미실행 | 휴대폰 origin을 APP_ALLOWED_ORIGINS에 등록하거나 Vercel 미리보기 필요 |
+| 원격 E2E (Vercel → Edge → DB → Realtime) | 통과 (2026-10-24) | https://party-game-psi-pink.vercel.app, 데스크톱 앱 내장 브라우저 3세션: 생성(콜드 스타트 약 6초)·자동 복구·참가 2명, 입장이 방장 화면에 0.14초, 설정 변경이 손님 화면에 0.9초 반영(Realtime 동작). 손님 설정 select 비활성. 테스트 방은 종료 처리 |
+| 실기기 3대 (iOS/Android) | 미실행 | 사용자 휴대폰 확인 필요 |

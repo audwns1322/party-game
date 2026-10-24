@@ -18,7 +18,7 @@ const rpc: Rpc = async (fn,args) => {
 };
 const events: unknown[] = [];
 const broadcast = async (room:string,version:number) => { events.push({room_id:room,version}); };
-const api = {create:createRoomHandler(rpc,broadcast),join:joinRoomHandler(rpc,broadcast),snapshot:snapshotRoomHandler(rpc),game:gameCommandHandler(rpc,broadcast),room:commandHandler(rpc,broadcast)};
+const api = {create:createRoomHandler(rpc,broadcast),join:joinRoomHandler(rpc,broadcast),snapshot:snapshotRoomHandler(rpc,broadcast),game:gameCommandHandler(rpc,broadcast),room:commandHandler(rpc,broadcast)};
 const request = (body:object,token?:string) => new Request('https://test.invalid',{method:'POST',headers:{'x-forwarded-for':randomUUID(),...(token ? {Authorization:`Bearer ${token}`} : {})},body:JSON.stringify(body)});
 const create = async () => await (await api.create(request({nickname:'방장님'}))).json() as Issued;
 const join = async (s:Issued,nickname:string) => await (await api.join(request({room_code:s.code,nickname}))).json() as Issued;
@@ -115,6 +115,7 @@ describe('M2 custom words and transitions',()=>{
     try {
       await restored.exec('create role anon; create role authenticated; create role service_role;');
       for(const file of (await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort())await restored.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
+      await restored.exec(await readFile('supabase/rollback/m3.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m2.sql','utf8'));
       await restored.exec('set role service_role');
       const {rows}=await restored.query<{value:{room_id:string}}>("select public.room_create('복구방장','복구방장',repeat('a',64),repeat('b',64)) as value");
@@ -133,5 +134,85 @@ describe('M2 custom words and transitions',()=>{
     const player=rows[0];
     await db.query('delete from app_private.round_players where round_id=$1 and player_id=$2',[first,player.player_id]);
     await expect(db.query('update app_private.round_players set round_id=$1,turn_order=$2 where round_id=$3 and player_id=$4',[first,player.turn_order,second,player.player_id])).rejects.toThrow(/INVALID_ASSIGNMENT/);
+  });
+});
+
+async function hints(laps=1,seconds=60) {
+  const players=await room(); const host=players[0]; const dto=await snapshot(host);
+  expect((await api.room(request({room_id:host.room_id,action:'update_settings',payload:{hint_rounds:laps,discussion_seconds:seconds},expected_version:dto.room.version,request_id:randomUUID()},host.token))).status).toBe(200);
+  expect((await game(host,'start_round')).status).toBe(200);
+  const rid=(await snapshot(host)).round!.id;
+  for(const p of players) expect((await game(p,'ack_role',{round_id:rid})).status).toBe(200);
+  return players;
+}
+async function finishAll(players:Issued[]) {
+  for(let i=0;i<36;i++) {
+    const r=(await snapshot(players[0])).round!; if(r.phase!=='HINT') return;
+    const p=players.find(p=>p.player_id===r.current_player_id)!;
+    expect((await game(p,'finish_hint',{round_id:r.id,hint_index:r.hint_index})).status).toBe(200);
+  }
+  throw new Error('Hint cursor did not finish');
+}
+describe('M3 server progression',()=>{
+  it.each([1,2,3])('completes exactly %i laps in frozen speaking order',async laps=>{
+    const players=await hints(laps);const first=(await snapshot(players[0])).round!;
+    for(let i=0;i<3*laps;i++) {
+      const r=(await snapshot(players[0])).round!;
+      expect(r.current_player_id).toBe(first.participant_ids[i%3]);expect(r.hint_round).toBe(Math.floor(i/3)+1);
+      expect((await game(players.find(p=>p.player_id===r.current_player_id)!,'finish_hint',{round_id:r.id,hint_index:i})).status).toBe(200);
+    }
+    const r=(await snapshot(players[0])).round!;expect(r.phase).toBe('DISCUSS');expect(r.hint_index).toBe(3*laps);
+  });
+  it('rejects wrong speaker, stale cursor, waiters and guest pause; replays one finish exactly once',async()=>{
+    const players=await hints();const dto=await snapshot(players[0]);const r=dto.round!;
+    const speaker=players.find(p=>p.player_id===r.current_player_id)!;const other=players.find(p=>p!==speaker)!;
+    expect(await (await game(other,'finish_hint',{round_id:r.id,hint_index:0})).json()).toEqual({error:'NOT_YOUR_TURN'});
+    expect((await game(speaker,'finish_hint',{round_id:r.id,hint_index:1})).status).toBe(409);
+    expect((await game(players[1],'pause',{round_id:r.id})).status).toBe(403);
+    const late=await join(players[0],'대기참가');
+    expect((await game(late,'finish_hint',{round_id:r.id,hint_index:0})).status).toBe(403);
+    const version=(await snapshot(speaker)).room.version;
+    const overrides={expected_version:version,expected_phase:'HINT',request_id:randomUUID()};
+    const payload={round_id:r.id,hint_index:0};
+    const first=await (await game(speaker,'finish_hint',payload,overrides)).json();events.length=0;
+    expect(await (await game(speaker,'finish_hint',payload,overrides)).json()).toEqual(first);expect(events).toHaveLength(0);
+    expect((await snapshot(speaker)).round!.hint_index).toBe(1);
+    expect((await game(speaker,'finish_hint',payload,{...overrides,request_id:randomUUID()})).status).toBe(409);
+  });
+  it.each([60,120,180,300])('uses %i-second server deadline and settles it only once',async seconds=>{
+    const players=await hints(1,seconds);await finishAll(players);const before=await snapshot(players[0]);const r=before.round!;
+    expect((Date.parse(r.deadline_at!)-Date.parse(before.server_now!))/1000).toBeGreaterThan(seconds-2);
+    expect(await (await game(players[0],'start_vote',{round_id:r.id})).json()).toEqual({error:'DISCUSSION_NOT_OVER'});
+    await db.query("update app_private.rounds set deadline_at=clock_timestamp()-interval '1 second' where id=$1",[r.id]);
+    events.length=0;const after=await snapshot(players[1]);expect(after.round!.phase).toBe('VOTE_1');expect(after.room.version).toBe(before.room.version+1);
+    expect(after).not.toHaveProperty('_transition_applied');expect(events).toHaveLength(1);
+    expect((await snapshot(players[2])).room.version).toBe(after.room.version);expect(events).toHaveLength(1);
+    for(const p of players){const dto=await snapshot(p);if(dto.round!.me!.role==='liar')expect(dto.round!.me!.word).toBeNull();}
+  });
+  it('freezes hint cursor and discussion remaining time across pause/resume',async()=>{
+    const players=await hints();const host=players[0];let r=(await snapshot(host)).round!;
+    expect((await game(host,'pause',{round_id:r.id})).status).toBe(200);
+    expect((await snapshot(host)).round!.phase).toBe('PAUSED_HOST');
+    expect((await game(players.find(p=>p.player_id===r.current_player_id)!,'finish_hint',{round_id:r.id,hint_index:0})).status).toBe(409);
+    await game(host,'resume',{round_id:r.id});expect((await snapshot(host)).round!.current_player_id).toBe(r.current_player_id);
+    await finishAll(players);r=(await snapshot(host)).round!;await game(host,'pause',{round_id:r.id});
+    const paused=(await snapshot(host)).round!;expect(paused.deadline_at).toBeNull();expect(paused.remaining_ms).toBeGreaterThan(58000);
+    await db.query("update app_private.rounds set phase_started_at=now()-interval '1 hour' where id=$1",[r.id]);
+    expect((await snapshot(host)).round!.remaining_ms).toBe(paused.remaining_ms);
+    await game(host,'resume',{round_id:r.id});const resumed=await snapshot(host);
+    expect(resumed.round!.phase).toBe('DISCUSS');expect(Date.parse(resumed.round!.deadline_at!)-Date.parse(resumed.server_now!)).toBeGreaterThan(paused.remaining_ms!-1000);
+  });
+  it('keeps unlimited discussion until host starts vote, including pause/resume',async()=>{
+    const players=await hints(1,0);await finishAll(players);const host=players[0];const r=(await snapshot(host)).round!;
+    expect(r.deadline_at).toBeNull();expect((await game(players[1],'start_vote',{round_id:r.id})).status).toBe(403);
+    await game(host,'pause',{round_id:r.id});await game(host,'resume',{round_id:r.id});expect((await snapshot(host)).round!.deadline_at).toBeNull();
+    expect((await game(host,'start_vote',{round_id:r.id})).status).toBe(200);expect((await snapshot(host)).round!.phase).toBe('VOTE_1');
+  });
+  it('heartbeat settles an expired deadline and invalid tokens cannot advance it',async()=>{
+    const players=await hints();await finishAll(players);const host=players[0];const r=(await snapshot(host)).round!;
+    await db.query("update app_private.rounds set deadline_at=clock_timestamp()-interval '1 second' where id=$1",[r.id]);
+    expect((await api.snapshot(new Request('https://test.invalid?room_id='+host.room_id,{headers:{Authorization:'Bearer '+ 'f'.repeat(64)}}))).status).toBe(403);
+    events.length=0;expect((await api.room(request({room_id:host.room_id,action:'heartbeat',request_id:randomUUID()},host.token))).status).toBe(200);expect(events).toHaveLength(1);
+    expect((await snapshot(host)).round!.phase).toBe('VOTE_1');
   });
 });

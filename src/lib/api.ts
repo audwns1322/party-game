@@ -3,13 +3,16 @@ export type Session = { room_id: string; code: string; player_id: string; token:
 export type Issued = Session & { recovery_code: string };
 export type Settings = { word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300 };
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
-export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT';
+export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'VOTE_1';
 export type RoundSnapshot = {
   id: string; phase: Exclude<GamePhase,'LOBBY'>; version: number; participant_ids: string[];
   submitted_count: number; acknowledged_count: number;
+  hint_index: number; hint_round: number; hint_rounds: number; current_player_id: string | null;
+  deadline_at: string | null; remaining_ms: number | null; paused_phase: 'HINT' | 'DISCUSS' | null;
   me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null } | null;
 };
 export type RoomSnapshot = {
+  server_now?: string;
   room: { id: string; code: string; status: string; version: number; host_player_id: string; settings: Settings; locked: boolean; expires_at: string };
   me: { player_id: string; is_host: boolean };
   players: Player[];
@@ -60,6 +63,9 @@ const MESSAGES: Record<string, string> = {
   NICKNAME_TAKEN: '이미 있거나 너무 비슷한 닉네임이에요.',
   RECOVERY_FAILED: '복구 코드가 맞지 않아요.',
   HOST_ONLY: '방장만 할 수 있어요.',
+  NOT_YOUR_TURN: '현재 힌트 차례인 참가자만 완료할 수 있어요.',
+  DISCUSSION_NOT_OVER: '토론 시간이 아직 남아 있어요.',
+  DISCUSSION_OVER: '토론 시간이 끝났어요. 최신 상태를 확인해 주세요.',
   VERSION_CONFLICT: '방 상태가 바뀌었어요. 다시 시도해 주세요.',
   PHASE_CONFLICT: '게임 단계가 바뀌었어요. 최신 화면에서 다시 시도해 주세요.',
   REQUEST_CONFLICT: '요청 내용이 달라졌어요. 최신 상태를 확인해 주세요.',

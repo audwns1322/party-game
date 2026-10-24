@@ -13,7 +13,7 @@ const KNOWN: Record<string, number> = {
   RATE_LIMITED: 429,
   PLAYER_COUNT: 409, PLAYERS_OFFLINE: 409, ROUND_ACTIVE: 409, PHASE_CONFLICT: 409,
   REQUEST_CONFLICT: 409, ALREADY_SUBMITTED: 409, ALREADY_ACKNOWLEDGED: 409,
-  NOT_ROUND_PLAYER: 403, INVALID_WORD: 400,
+  NOT_ROUND_PLAYER: 403, INVALID_WORD: 400, NOT_YOUR_TURN: 403, DISCUSSION_NOT_OVER: 409, DISCUSSION_OVER: 409,
 };
 export class ApiError extends Error {
   readonly code: string;
@@ -166,14 +166,16 @@ export function recoverHandler(rpc: Rpc) {
     return issue(async (p_credential_hash, p_new_recovery_hash) => await rpc('player_recover', { p_code: code, p_recovery_hash: recoveryHash, p_credential_hash, p_new_recovery_hash }) as Issued, null);
   });
 }
-export function snapshotRoomHandler(rpc: Rpc) {
+export function snapshotRoomHandler(rpc: Rpc, broadcast?: Broadcast) {
   return guard(async (request) => {
     if (request.method !== 'GET') throw new ApiError('METHOD_NOT_ALLOWED');
     const token = bearer(request);
     const room = roomId(new URL(request.url).searchParams.get('room_id'));
     const snapshot = await rpc('room_snapshot', { p_credential_hash: await hashToken(token), p_room: room });
     if (!snapshot) throw new ApiError('FORBIDDEN');
-    return reply(200, snapshot as object);
+    const { _transition_applied, ...dto } = snapshot as Record<string, unknown>;
+    if (_transition_applied && broadcast) await notify(broadcast, room, (dto.room as {version:number}).version);
+    return reply(200, dto);
   });
 }
 const ACTIONS = new Set(['heartbeat', 'update_settings', 'lock', 'kick', 'leave', 'close_room']);

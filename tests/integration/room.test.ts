@@ -17,7 +17,7 @@ const rpc: Rpc = async (fn, args) => {
 };
 const sent: Array<[string, number]> = [];
 const broadcast = async (room: string, version: number) => { sent.push([room, version]); };
-const api = { create: createRoomHandler(rpc, broadcast), join: joinRoomHandler(rpc, broadcast), recover: recoverHandler(rpc, broadcast), snapshot: snapshotRoomHandler(rpc), command: commandHandler(rpc, broadcast) };
+const api = { create: createRoomHandler(rpc, broadcast), join: joinRoomHandler(rpc, broadcast), recover: recoverHandler(rpc), snapshot: snapshotRoomHandler(rpc), command: commandHandler(rpc, broadcast) };
 type Session = { room_id: string; code: string; player_id: string; token: string; recovery_code: string };
 const post = (body: object, token?: string) => new Request('https://fn.test', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: JSON.stringify(body) });
 const create = async (nickname = '방장') => (await (await api.create(post({ nickname }))).json()) as Session;
@@ -28,7 +28,7 @@ const version = async (s: Session) => ((await (await snapshot(s, s.room_id)).jso
 
 beforeAll(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role;');
-  for (const file of ['20261021071859_m0_security_poc.sql', '20261024064956_m1_rooms_players.sql']) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
+  for (const file of ['20261021071859_m0_security_poc.sql', '20261024064956_m1_rooms_players.sql', '20261024080000_m1_hardening.sql']) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
 }, 30000);
 afterAll(async () => { await db.close(); });
 beforeEach(() => { sent.length = 0; });
@@ -40,8 +40,8 @@ describe('database permissions', () => {
       try {
         await expect(db.query('select * from app_private.rooms')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.players')).rejects.toThrow(/permission denied/);
-        await expect(db.query("select public.room_create('닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
-        await expect(db.query("select public.room_join('000000', '닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
+        await expect(db.query("select public.room_create('닉네임', '닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
+        await expect(db.query("select public.room_join('000000', '닉네임', '닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.player_recover('000000', repeat('a',64), repeat('b',64), repeat('c',64))")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_snapshot(repeat('a',64), gen_random_uuid())")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_command(repeat('a',64), gen_random_uuid(), 'leave', '{}', 1)")).rejects.toThrow(/permission denied/);
@@ -72,6 +72,7 @@ describe('create / join / capacity', () => {
     expect(await (await join(host.code, '열세번째')).json()).toEqual({ error: 'ROOM_FULL' });
     const other = await create('Alpha');
     expect(await (await join(other.code, 'alpha')).json()).toEqual({ error: 'NICKNAME_TAKEN' });
+    expect(await (await join(other.code, String.fromCodePoint(0xff21, 0xff4c, 0xff50, 0xff48, 0xff41))).json()).toEqual({ error: 'NICKNAME_TAKEN' });
     expect((await join(other.code, ' 가 ')).status).toBe(400);
     const { rows } = await db.query<{ c: string }>("select lpad(n::text,6,'0') c from generate_series(0,999999) n where lpad(n::text,6,'0') not in (select code from app_private.rooms where status='open') limit 1");
     expect(await (await join(rows[0].c, '손님')).json()).toEqual({ error: 'ROOM_NOT_FOUND' });
@@ -151,5 +152,44 @@ describe('recovery and lifecycle', () => {
     expect((await snapshot(host, host.room_id)).status).toBe(410);
     expect((await join(host.code, '손님')).status).toBe(404);
     expect((await api.recover(post({ room_code: host.code, recovery_code: host.recovery_code }))).status).toBe(403);
+  });
+});
+
+describe('hardening', () => {
+  it('host can kick (kicked token is dead) and lock the room; guests cannot', async () => {
+    const host = await create('강퇴방장');
+    const bot = (await (await join(host.code, '봇이다')).json()) as Session;
+    const friend = (await (await join(host.code, '친구야')).json()) as Session;
+    let v = await version(host);
+    expect(await (await command(friend, host.room_id, 'kick', v, { player_id: bot.player_id })).json()).toEqual({ error: 'HOST_ONLY' });
+    expect(await (await command(host, host.room_id, 'kick', v, { player_id: host.player_id })).json()).toEqual({ error: 'CANNOT_KICK_SELF' });
+    expect(await (await command(host, host.room_id, 'kick', v, { player_id: 'nope' })).json()).toEqual({ error: 'PLAYER_NOT_FOUND' });
+    expect((await command(host, host.room_id, 'kick', v, { player_id: bot.player_id })).status).toBe(200);
+    expect((await snapshot(bot, host.room_id)).status).toBe(403);
+    v = await version(host);
+    expect((await command(friend, host.room_id, 'lock', v, { locked: true })).status).toBe(403);
+    expect((await command(host, host.room_id, 'lock', v, { locked: 'yes' })).status).toBe(400);
+    expect((await command(host, host.room_id, 'lock', v, { locked: true })).status).toBe(200);
+    expect(await (await join(host.code, '새손님')).json()).toEqual({ error: 'ROOM_LOCKED' });
+    const dto = await (await snapshot(friend, host.room_id)).json();
+    expect(dto.room.locked).toBe(true);
+    expect(dto.players.map((p: { nickname: string }) => p.nickname)).toEqual(['강퇴방장', '친구야']);
+  });
+  it('no-op commands and recovery do not bump the version or broadcast', async () => {
+    const host = await create('버전방장');
+    const v = await version(host);
+    sent.length = 0;
+    expect(await (await command(host, host.room_id, 'update_settings', v, {})).json()).toEqual({ version: v });
+    expect(await (await command(host, host.room_id, 'update_settings', v, { hint_rounds: 1 })).json()).toEqual({ version: v });
+    expect(await (await command(host, host.room_id, 'lock', v, { locked: false })).json()).toEqual({ version: v });
+    const fresh = (await (await api.recover(post({ room_code: host.code, recovery_code: host.recovery_code }))).json()) as Session;
+    expect(await version(fresh)).toBe(v);
+    expect(sent).toEqual([]);
+  });
+  it('rejects out-of-range versions as bad requests and ignores the version on heartbeat', async () => {
+    const host = await create('범위방장');
+    for (const bad of [0, -1, 2 ** 31, 1.5, '1']) expect((await command(host, host.room_id, 'update_settings', bad as number, { hint_rounds: 2 })).status).toBe(400);
+    const res = await api.command(post({ room_id: host.room_id, action: 'heartbeat', expected_version: { x: 1 }, request_id: randomUUID() }, host.token));
+    expect(res.status).toBe(200);
   });
 });

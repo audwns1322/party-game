@@ -7,7 +7,8 @@ export type Broadcast = (roomId: string, version: number) => Promise<void>;
 
 const KNOWN: Record<string, number> = {
   INVALID_REQUEST: 400, INVALID_NICKNAME: 400, INVALID_CODE: 400, INVALID_SETTINGS: 400, UNKNOWN_ACTION: 400,
-  UNAUTHORIZED: 401, FORBIDDEN: 403, HOST_ONLY: 403, RECOVERY_FAILED: 403, ROOM_NOT_FOUND: 404,
+  CANNOT_KICK_SELF: 400, UNAUTHORIZED: 401, FORBIDDEN: 403, HOST_ONLY: 403, RECOVERY_FAILED: 403, ROOM_LOCKED: 403,
+  ROOM_NOT_FOUND: 404, PLAYER_NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405, ROOM_FULL: 409, NICKNAME_TAKEN: 409, VERSION_CONFLICT: 409, ROOM_CLOSED: 410,
 };
 export class ApiError extends Error {
@@ -23,16 +24,38 @@ const reply = (status: number, body: object) => Response.json(body, { status, he
 const fail = (code: string) => reply(KNOWN[code] ?? 503, { error: code });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Control, zero-width and bidi-override characters (built from code points to keep the source ASCII).
-const CONTROL = new RegExp(`[${[[0x00, 0x1f], [0x7f, 0x9f], [0x200b, 0x200f], [0x2028, 0x202e], [0x2066, 0x2069], [0xfeff, 0xfeff]]
-  .map(([a, b]) => `\\u${a.toString(16).padStart(4, '0')}-\\u${b.toString(16).padStart(4, '0')}`).join('')}]`);
+// Built from code points so the source stays ASCII (some tooling rewrites \u escapes).
+const cp = (n: number) => `\\u{${n.toString(16)}}`;
+const charClass = (ranges: Array<[number, number]>) => new RegExp(`[${ranges.map(([a, b]) => `${cp(a)}-${cp(b)}`).join('')}]`, 'u');
+// Control, invisible, filler and bidi characters. ZWJ (0x200d) is handled separately (emoji sequences only).
+const INVISIBLE = charClass([[0x00, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x34f, 0x34f], [0x61c, 0x61c], [0x115f, 0x1160],
+  [0x17b4, 0x17b5], [0x180b, 0x180f], [0x200b, 0x200c], [0x200e, 0x200f], [0x2028, 0x202e], [0x2060, 0x206f],
+  [0x2800, 0x2800], [0x3164, 0x3164], [0xfeff, 0xfeff], [0xffa0, 0xffa0], [0xfff0, 0xfff8], [0xe0000, 0xe007f]]);
+const BAD_ZWJ = new RegExp(`(?<!\\p{Extended_Pictographic}${cp(0xfe0f)}?)${cp(0x200d)}|${cp(0x200d)}(?!\\p{Extended_Pictographic})`, 'u');
+const LATIN = /\p{Script=Latin}/u;
+const CYRILLIC_GREEK = /[\p{Script=Cyrillic}\p{Script=Greek}]/u;
+// Look-alike folding for the uniqueness key (Cyrillic/Greek homoglyphs, 0/O, 1/l/I).
+const FOLD = new Map<string, string>([
+  [0x430, 'a'], [0x435, 'e'], [0x43e, 'o'], [0x440, 'p'], [0x441, 'c'], [0x443, 'y'], [0x445, 'x'], [0x456, 'l'],
+  [0x458, 'j'], [0x455, 's'], [0x501, 'd'], [0x4bb, 'h'], [0x4cf, 'l'], [0x3b1, 'a'], [0x3bf, 'o'], [0x3c1, 'p'],
+  [0x3bd, 'v'], [0x3b9, 'l'], [0x3ba, 'k'], [0x3c4, 't'], [0x3c5, 'u'], [0x3c7, 'x'], [0x3b5, 'e'],
+].map(([c, to]) => [String.fromCodePoint(c as number), to as string]));
+const graphemes = (value: string) => [...new Intl.Segmenter('ko', { granularity: 'grapheme' }).segment(value)].length;
 
-export function normalizeNickname(value: unknown): string {
+export type Nickname = { display: string; key: string };
+/** NFKC display name (2-16 visible characters) plus a confusable-folded key used for uniqueness. */
+export function normalizeNickname(value: unknown): Nickname {
   if (typeof value !== 'string') throw new ApiError('INVALID_NICKNAME');
-  const nickname = value.normalize('NFC').trim().replace(/\s+/g, ' ');
-  const length = [...nickname].length;
-  if (length < 2 || length > 16 || CONTROL.test(nickname)) throw new ApiError('INVALID_NICKNAME');
-  return nickname;
+  const display = value.normalize('NFKC').trim().replace(/\s+/g, ' ');
+  const hasLoneSurrogate = [...display].some((ch) => { const c = ch.codePointAt(0)!; return c >= 0xd800 && c <= 0xdfff; });
+  const length = graphemes(display);
+  if (length < 2 || length > 16 || [...display].length > 64 || hasLoneSurrogate || INVISIBLE.test(display) || BAD_ZWJ.test(display)) {
+    throw new ApiError('INVALID_NICKNAME');
+  }
+  if (LATIN.test(display) && CYRILLIC_GREEK.test(display)) throw new ApiError('INVALID_NICKNAME');
+  const key = [...display.toLowerCase()].map((ch) => FOLD.get(ch) ?? ch).join('')
+    .replace(/[01i|]/g, (ch) => (ch === '0' ? 'o' : 'l')).replace(/ /g, '');
+  return { display, key };
 }
 export function normalizeCode(value: unknown): string {
   if (typeof value !== 'string' || !/^\d{6}$/.test(value.trim())) throw new ApiError('INVALID_CODE');
@@ -89,11 +112,11 @@ function guard(run: (request: Request) => Promise<Response>) {
 
 type Issued = { room_id: string; code: string; player_id: string; version: number };
 /** Issue a fresh session token + recovery code; only their hashes reach the database. */
-async function issue(run: (credentialHash: string, recoveryHash: string) => Promise<Issued>, broadcast: Broadcast) {
+async function issue(run: (credentialHash: string, recoveryHash: string) => Promise<Issued>, broadcast: Broadcast | null) {
   const token = newToken();
   const recovery = newRecoveryCode();
   const issued = await run(await hashToken(token), await hashToken(normalizeRecoveryCode(recovery)));
-  await notify(broadcast, issued.room_id, issued.version);
+  if (broadcast) await notify(broadcast, issued.room_id, issued.version);
   return reply(200, { room_id: issued.room_id, code: issued.code, player_id: issued.player_id, token, recovery_code: recovery });
 }
 
@@ -101,7 +124,7 @@ export function createRoomHandler(rpc: Rpc, broadcast: Broadcast) {
   return guard(async (request) => {
     const input = await body(request);
     const nickname = normalizeNickname(input.nickname);
-    return issue(async (p_credential_hash, p_recovery_hash) => await rpc('room_create', { p_nickname: nickname, p_credential_hash, p_recovery_hash }) as Issued, broadcast);
+    return issue(async (p_credential_hash, p_recovery_hash) => await rpc('room_create', { p_nickname: nickname.display, p_nickname_key: nickname.key, p_credential_hash, p_recovery_hash }) as Issued, broadcast);
   });
 }
 export function joinRoomHandler(rpc: Rpc, broadcast: Broadcast) {
@@ -109,15 +132,16 @@ export function joinRoomHandler(rpc: Rpc, broadcast: Broadcast) {
     const input = await body(request);
     const code = normalizeCode(input.room_code);
     const nickname = normalizeNickname(input.nickname);
-    return issue(async (p_credential_hash, p_recovery_hash) => await rpc('room_join', { p_code: code, p_nickname: nickname, p_credential_hash, p_recovery_hash }) as Issued, broadcast);
+    return issue(async (p_credential_hash, p_recovery_hash) => await rpc('room_join', { p_code: code, p_nickname: nickname.display, p_nickname_key: nickname.key, p_credential_hash, p_recovery_hash }) as Issued, broadcast);
   });
 }
-export function recoverHandler(rpc: Rpc, broadcast: Broadcast) {
+// Recovery changes nothing other players can see, so it sends no version hint.
+export function recoverHandler(rpc: Rpc) {
   return guard(async (request) => {
     const input = await body(request);
     const code = normalizeCode(input.room_code);
     const recoveryHash = await hashToken(normalizeRecoveryCode(input.recovery_code));
-    return issue(async (p_credential_hash, p_new_recovery_hash) => await rpc('player_recover', { p_code: code, p_recovery_hash: recoveryHash, p_credential_hash, p_new_recovery_hash }) as Issued, broadcast);
+    return issue(async (p_credential_hash, p_new_recovery_hash) => await rpc('player_recover', { p_code: code, p_recovery_hash: recoveryHash, p_credential_hash, p_new_recovery_hash }) as Issued, null);
   });
 }
 export function snapshotRoomHandler(rpc: Rpc) {
@@ -130,7 +154,8 @@ export function snapshotRoomHandler(rpc: Rpc) {
     return reply(200, snapshot as object);
   });
 }
-const ACTIONS = new Set(['heartbeat', 'update_settings', 'leave', 'close_room']);
+const ACTIONS = new Set(['heartbeat', 'update_settings', 'lock', 'kick', 'leave', 'close_room']);
+const MAX_INT = 2147483647;
 export function commandHandler(rpc: Rpc, broadcast: Broadcast) {
   return guard(async (request) => {
     const token = bearer(request);
@@ -138,11 +163,12 @@ export function commandHandler(rpc: Rpc, broadcast: Broadcast) {
     const room = roomId(input.room_id);
     if (typeof input.action !== 'string' || !ACTIONS.has(input.action)) throw new ApiError('UNKNOWN_ACTION');
     if (typeof input.request_id !== 'string' || !UUID.test(input.request_id)) throw new ApiError('INVALID_REQUEST');
-    const expected = input.expected_version;
-    if (input.action !== 'heartbeat' && !Number.isSafeInteger(expected)) throw new ApiError('INVALID_REQUEST');
+    // heartbeat ignores the version; every other command must name the version it saw (1..int4 max).
+    const expected = input.action === 'heartbeat' ? null : input.expected_version;
+    if (expected !== null && !(Number.isInteger(expected) && (expected as number) >= 1 && (expected as number) <= MAX_INT)) throw new ApiError('INVALID_REQUEST');
     const payload = input.payload ?? {};
     if (typeof payload !== 'object' || Array.isArray(payload)) throw new ApiError('INVALID_REQUEST');
-    const result = await rpc('room_command', { p_credential_hash: await hashToken(token), p_room: room, p_action: input.action, p_payload: payload, p_expected_version: expected ?? null }) as { version: number; changed: boolean };
+    const result = await rpc('room_command', { p_credential_hash: await hashToken(token), p_room: room, p_action: input.action, p_payload: payload, p_expected_version: expected }) as { version: number; changed: boolean };
     if (result.changed) await notify(broadcast, room, result.version);
     return reply(200, { version: result.version });
   });

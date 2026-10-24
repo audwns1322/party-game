@@ -4,7 +4,7 @@ export type Issued = Session & { recovery_code: string };
 export type Settings = { word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300 };
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
 export type RoomSnapshot = {
-  room: { id: string; code: string; status: string; version: number; host_player_id: string; settings: Settings; expires_at: string };
+  room: { id: string; code: string; status: string; version: number; host_player_id: string; settings: Settings; locked: boolean; expires_at: string };
   me: { player_id: string; is_host: boolean };
   players: Player[];
 };
@@ -42,17 +42,19 @@ export const api = {
 };
 
 const MESSAGES: Record<string, string> = {
-  INVALID_NICKNAME: '닉네임은 2~16자로 입력해 주세요.',
+  INVALID_NICKNAME: '닉네임은 2~16자, 보이는 글자로만 입력해 주세요. 다른 문자와 섞인 외국 문자는 쓸 수 없어요.',
   INVALID_CODE: '방 코드는 숫자 6자리예요.',
-  ROOM_NOT_FOUND: '방을 찾을 수 없어요. 코드를 확인해 주세요.',
+  ROOM_NOT_FOUND: '방을 찾을 수 없어요. 코드를 확인하거나, 이미 종료된 방일 수 있어요.',
+  ROOM_LOCKED: '방장이 입장을 잠갔어요. 방장에게 잠금 해제를 부탁해 주세요.',
+  PLAYER_NOT_FOUND: '이미 나간 참가자예요.',
   ROOM_FULL: '방이 가득 찼어요. (최대 12명)',
-  NICKNAME_TAKEN: '이미 사용 중인 닉네임이에요.',
+  NICKNAME_TAKEN: '이미 있거나 너무 비슷한 닉네임이에요.',
   RECOVERY_FAILED: '복구 코드가 맞지 않아요.',
   HOST_ONLY: '방장만 할 수 있어요.',
   VERSION_CONFLICT: '방 상태가 바뀌었어요. 다시 시도해 주세요.',
   ROOM_CLOSED: '종료된 방이에요.',
-  FORBIDDEN: '이 방에 참가 중이 아니에요.',
-  NETWORK: '네트워크 연결을 확인해 주세요.',
+  FORBIDDEN: '이 방의 참가자가 아니에요. 나갔거나 내보내졌을 수 있어요.',
+  NETWORK: '서버에 연결할 수 없어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.',
   NOT_CONFIGURED: '서버 설정(.env.local)이 없어요.',
 };
 export const messageFor = (error: unknown) => MESSAGES[error instanceof ApiError ? error.code : ''] ?? '잠시 후 다시 시도해 주세요.';

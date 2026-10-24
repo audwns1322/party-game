@@ -2,10 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { errorCode, newRecoveryCode, normalizeCode, normalizeNickname, normalizeRecoveryCode } from '../../supabase/functions/_shared/room';
 
 describe('input normalization', () => {
-  it('nickname: NFC, trimmed, 2–16 code points, no control/bidi characters', () => {
-    expect(normalizeNickname('  철수   영희 ')).toBe('철수 영희');
-    expect(normalizeNickname('😀😀')).toBe('😀😀');
-    for (const bad of ['가', 'a'.repeat(17), 'ab\u0007', 'ab‮', 42, null]) expect(() => normalizeNickname(bad)).toThrow();
+  it('nickname: NFKC, trimmed, 2-16 graphemes, no invisible/bidi/filler characters', () => {
+    const C = String.fromCodePoint;
+    expect(normalizeNickname('  철수   영희 ')).toEqual({ display: '철수 영희', key: '철수영희' });
+    expect(normalizeNickname(C(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467) + '가족').display).toHaveLength(10);
+    for (const bad of ['가', 'a'.repeat(17), 'ab' + C(0x7), 'ab' + C(0x202e), 'Al' + C(0xad) + 'pha', C(0x3164, 0x3164), C(0x2800, 0x2800),
+      'ab' + C(0x200d) + 'c', 'ab' + C(0xd800), 'ab' + C(0xe0041), 42, null]) expect(() => normalizeNickname(bad)).toThrow();
+  });
+  it('nickname key folds look-alikes so impersonation collides', () => {
+    const C = String.fromCodePoint;
+    const key = (v: string) => normalizeNickname(v).key;
+    expect(key('Alpha')).toBe(key(C(0xff21, 0xff4c, 0xff50, 0xff48, 0xff41)));
+    expect(key('All')).toBe(key('Al1'));
+    expect(key('ace')).toBe(key(C(0x430, 0x441, 0x435)));
+    expect(() => normalizeNickname(C(0x410) + 'lpha')).toThrow();
   });
   it('room code: exactly six digits', () => {
     expect(normalizeCode(' 012345 ')).toBe('012345');

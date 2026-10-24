@@ -8,6 +8,11 @@ it('rejects unauthenticated/malformed/oversized and invalid command fields befor
   for(const body of ['{','x'.repeat(4097),'null',JSON.stringify({...valid,payload:[]}),JSON.stringify({...valid,request_id:'bad'}),JSON.stringify({...valid,expected_version:0}),JSON.stringify({...valid,expected_phase:'FINAL_RESULT'})]) expect((await run(req(body))).status).toBe(400);
   expect(rpc).not.toHaveBeenCalled();
 });
+it('returns 400 for object-shaped identifiers instead of treating coercion failures as server errors',async()=>{
+  const rpc=vi.fn();const run=gameCommandHandler(rpc,vi.fn());
+  for(const field of ['room_id','request_id'])expect((await run(req(JSON.stringify({...valid,[field]:{toString:null}})))).status).toBe(400);
+  expect(rpc).not.toHaveBeenCalled();
+});
 it('maps unexpected database failure to a safe error and never broadcasts',async()=>{
   const broadcast=vi.fn();const run=gameCommandHandler(async()=>{throw Error('secret database text');},broadcast);
   const response=await run(req(JSON.stringify(valid)));expect(response.status).toBe(503);expect(await response.json()).toEqual({error:'TEMPORARILY_UNAVAILABLE'});expect(broadcast).not.toHaveBeenCalled();

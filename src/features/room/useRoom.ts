@@ -10,6 +10,11 @@ const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const realtime = url && key ? createPublicClient(url, key) : null;
 
 const isFatal = (error: unknown) => error instanceof ApiError && (error.status === 401 || error.status === 403 || error.status === 410);
+type GameRequest = Parameters<typeof api.game>[1];
+export function canReuseGameRequest(previous: GameRequest | null, current: Omit<GameRequest,'request_id'>): previous is GameRequest {
+  return previous?.action === current.action && previous.expected_version === current.expected_version
+    && previous.expected_phase === current.expected_phase && JSON.stringify(previous.payload) === JSON.stringify(current.payload);
+}
 
 /** Server snapshot is the only source of truth. Realtime and heartbeat only trigger a re-fetch. */
 export function useRoom(session: Session) {
@@ -87,10 +92,11 @@ export function useRoom(session: Session) {
     if (!snapshot) return;
     // Transport retries reuse the complete original request, including version and request_id.
     const previous = pending.current;
-    const body = previous?.action === action && JSON.stringify(previous.payload) === JSON.stringify(payload) ? previous : {
+    const current = {
       action, payload, expected_version: version.current,
-      expected_phase: (snapshot.round?.phase ?? 'LOBBY') as GamePhase, request_id: crypto.randomUUID(),
+      expected_phase: (snapshot.round?.phase ?? 'LOBBY') as GamePhase,
     };
+    const body = canReuseGameRequest(previous,current) ? previous : { ...current, request_id:crypto.randomUUID() };
     pending.current = body;
     try { await api.game(session,body); pending.current = null; }
     catch (error) {

@@ -41,11 +41,12 @@ try {
       await new Promise((resolve,reject)=>channel.subscribe(status=>{if(status==='SUBSCRIBED')resolve();if(['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status))reject(Error('Realtime subscribe failed'));}));
       const initial=await snapshot(host);const version=initial.room.version;
       const same={expected_version:version,expected_phase:'LOBBY',request_id:randomUUID()};
-      const [a,b]=await Promise.all([command(host,'start_round',{},same),command(host,'start_round',{}, {...same,request_id:randomUUID()})]);
+      const other={...same,request_id:randomUUID()};
+      const [a,b]=await Promise.all([command(host,'start_round',{},same),command(host,'start_round',{},other)]);
       assert.deepEqual([a.status,b.status].sort(),[200,409]);checks++;
       const winner=a.status===200?a:b;
-      const replayId=a.status===200?same.request_id:null;
-      if(replayId){const replay=await command(host,'start_round',{},same);assert.equal(replay.status,200);assert.equal(replay.data.version,winner.data.version);checks++;}
+      const winningRequest=a.status===200?same:other;
+      const replay=await command(host,'start_round',{},winningRequest);assert.equal(replay.status,200);assert.equal(replay.data.version,winner.data.version);checks++;
       const payload=await Promise.race([event,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('No server broadcast')),10000);})]);
       assert.deepEqual(Object.keys(payload).sort(),['room_id','version']);assert.equal(payload.room_id,host.room_id);checks++;
     } finally {clearTimeout(timer);await realtime.removeAllChannels();}

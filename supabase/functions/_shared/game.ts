@@ -13,7 +13,8 @@ export function gameCommandHandler(rpc: Rpc, broadcast: Broadcast) {
       if (text.length > 4096) throw new ApiError('INVALID_REQUEST');
       let input;
       try { input = JSON.parse(text); } catch { throw new ApiError('INVALID_REQUEST'); }
-      if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.room_id) || !UUID.test(input.request_id)
+      if (!input || typeof input !== 'object' || Array.isArray(input)
+        || typeof input.room_id !== 'string' || typeof input.request_id !== 'string' || !UUID.test(input.room_id) || !UUID.test(input.request_id)
         || !Number.isInteger(input.expected_version) || input.expected_version < 1 || input.expected_version > 2147483647
         || !['LOBBY','COLLECT_WORDS','REVEAL_ROLE','HINT'].includes(input.expected_phase)
         || !['start_round','submit_word','ack_role','cancel_round'].includes(input.action)) throw new ApiError('INVALID_REQUEST');

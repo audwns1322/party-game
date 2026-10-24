@@ -122,4 +122,16 @@ describe('M2 custom words and transitions',()=>{
       expect(result.rows[0].value.players).toHaveLength(1);
     } finally {await restored.close();}
   },15000);
+  it('rejects an active round without its frozen participant assignment',async()=>{
+    const host=await create();
+    await expect(db.query("insert into app_private.rounds(room_id,phase,config) values($1,'REVEAL_ROLE','{}')",[host.room_id])).rejects.toThrow(/INVALID_ASSIGNMENT/);
+  });
+  it('validates the source round when a participant row is moved to an ended round',async()=>{
+    const [host]=await room();await game(host,'start_round');const first=(await snapshot(host)).round!.id;
+    await game(host,'cancel_round');await game(host,'start_round');const second=(await snapshot(host)).round!.id;
+    const {rows}=await db.query<{player_id:string;turn_order:number}>("select b.player_id,a.turn_order from app_private.round_players b join app_private.round_players a on a.player_id=b.player_id where b.round_id=$1 and a.round_id=$2 and b.role='citizen' limit 1",[second,first]);
+    const player=rows[0];
+    await db.query('delete from app_private.round_players where round_id=$1 and player_id=$2',[first,player.player_id]);
+    await expect(db.query('update app_private.round_players set round_id=$1,turn_order=$2 where round_id=$3 and player_id=$4',[first,player.turn_order,second,player.player_id])).rejects.toThrow(/INVALID_ASSIGNMENT/);
+  });
 });

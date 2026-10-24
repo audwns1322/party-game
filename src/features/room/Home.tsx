@@ -50,9 +50,10 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         </section>
       )}
 
-      <div className="tabs" role="tablist" aria-label="시작 방법">
-        <button type="button" role="tab" id="tab-create" aria-controls="start-panel" aria-selected={mode === 'create'} onClick={() => { setMode('create'); setError(''); }}>방 만들기</button>
-        <button type="button" role="tab" id="tab-join" aria-controls="start-panel" aria-selected={mode === 'join'} onClick={() => { setMode('join'); setError(''); }}>참가하기</button>
+      <div className="tabs" role="tablist" aria-label="시작 방법"
+        onKeyDown={(e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { const next = mode === 'create' ? 'join' : 'create'; setMode(next); setError(''); document.getElementById(`tab-${next}`)?.focus(); } }}>
+        <button type="button" role="tab" id="tab-create" aria-controls="start-panel" aria-selected={mode === 'create'} tabIndex={mode === 'create' ? 0 : -1} onClick={() => { setMode('create'); setError(''); }}>방 만들기</button>
+        <button type="button" role="tab" id="tab-join" aria-controls="start-panel" aria-selected={mode === 'join'} tabIndex={mode === 'join' ? 0 : -1} onClick={() => { setMode('join'); setError(''); }}>참가하기</button>
       </div>
       <form id="start-panel" role="tabpanel" aria-labelledby={mode === 'create' ? 'tab-create' : 'tab-join'} onSubmit={submit} className="card" noValidate>
         {mode === 'join' && (

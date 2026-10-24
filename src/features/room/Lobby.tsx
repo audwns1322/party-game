@@ -16,20 +16,23 @@ function useArm() {
 }
 
 /** Announce joins/leaves to screen readers. */
-function useRosterAnnouncement(players: Player[] | undefined) {
-  const previous = useRef<Map<string, string> | null>(null);
+function useRosterAnnouncement(players: Player[] | undefined, hostId: string | undefined) {
+  const previous = useRef<{ names: Map<string, string>; host?: string } | null>(null);
   const [message, setMessage] = useState('');
+  const [hostChange, setHostChange] = useState('');
   useEffect(() => {
     if (!players) return;
-    const now = new Map(players.map((p) => [p.id, p.nickname]));
-    if (previous.current) {
-      const joined = [...now].filter(([id]) => !previous.current!.has(id)).map(([, n]) => `${n}님이 들어왔어요.`);
-      const left = [...previous.current].filter(([id]) => !now.has(id)).map(([, n]) => `${n}님이 나갔어요.`);
+    const names = new Map(players.map((p) => [p.id, p.nickname]));
+    const before = previous.current;
+    if (before) {
+      const joined = [...names].filter(([id]) => !before.names.has(id)).map(([, n]) => `${n}님이 들어왔어요.`);
+      const left = [...before.names].filter(([id]) => !names.has(id)).map(([, n]) => `${n}님이 나갔어요.`);
       if (joined.length || left.length) setMessage([...joined, ...left].join(' '));
+      if (before.host && hostId && before.host !== hostId) setHostChange(`방장이 ${names.get(hostId) ?? '다른 참가자'}님으로 바뀌었어요.`);
     }
-    previous.current = now;
-  }, [players]);
-  return message;
+    previous.current = { names, host: hostId };
+  }, [players, hostId]);
+  return { message, hostChange };
 }
 
 export function Lobby({ session }: { session: StoredSession }) {
@@ -39,7 +42,7 @@ export function Lobby({ session }: { session: StoredSession }) {
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState('');
   const { armed, arm, disarm } = useArm();
-  const announcement = useRosterAnnouncement(snapshot?.players);
+  const { message: announcement, hostChange } = useRosterAnnouncement(snapshot?.players, snapshot?.room.host_player_id);
   const inviteUrl = `${location.origin}/room/${session.code}`;
 
   useEffect(() => { QRCode.toDataURL(inviteUrl, { margin: 1, width: 220 }).then(setQr).catch(() => setQr('')); }, [inviteUrl]);
@@ -93,6 +96,7 @@ export function Lobby({ session }: { session: StoredSession }) {
     <main>
       {!online && <p className="banner" role="status">연결이 끊겼어요. 다시 연결하는 중…</p>}
       <p className="sr-only" aria-live="polite">{announcement}</p>
+      {hostChange && <p role="status" className="notice">{hostChange}</p>}
 
       <span className="badge">대기실 · 방 코드</span>
       <h1 className="code" aria-label={`방 코드 ${room.code.split('').join(' ')}`}>{room.code}</h1>

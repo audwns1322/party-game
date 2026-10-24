@@ -54,6 +54,7 @@ const MESSAGES: Record<string, string> = {
   VERSION_CONFLICT: '방 상태가 바뀌었어요. 다시 시도해 주세요.',
   ROOM_CLOSED: '종료된 방이에요.',
   FORBIDDEN: '이 방의 참가자가 아니에요. 나갔거나 내보내졌을 수 있어요.',
+  RATE_LIMITED: '요청이 너무 많아요. 몇 분 뒤에 다시 시도해 주세요.',
   NETWORK: '서버에 연결할 수 없어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.',
   NOT_CONFIGURED: '서버 설정(.env.local)이 없어요.',
 };

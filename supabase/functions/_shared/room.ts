@@ -10,6 +10,7 @@ const KNOWN: Record<string, number> = {
   CANNOT_KICK_SELF: 400, UNAUTHORIZED: 401, FORBIDDEN: 403, HOST_ONLY: 403, RECOVERY_FAILED: 403, ROOM_LOCKED: 403,
   ROOM_NOT_FOUND: 404, PLAYER_NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405, ROOM_FULL: 409, NICKNAME_TAKEN: 409, VERSION_CONFLICT: 409, ROOM_CLOSED: 410,
+  RATE_LIMITED: 429,
 };
 export class ApiError extends Error {
   readonly code: string;
@@ -110,6 +111,19 @@ function guard(run: (request: Request) => Promise<Response>) {
   };
 }
 
+/** [max hits, window seconds] per bucket. Generous for real groups, tight for scripts. */
+export const LIMITS = {
+  createPerIp: [10, 600], joinPerIp: [30, 600], joinPerRoom: [60, 600], recoverPerIp: [10, 600], recoverPerRoom: [30, 600],
+} as const satisfies Record<string, readonly [number, number]>;
+/** First hop of X-Forwarded-For (set by the Supabase edge), hashed so raw IPs are never stored. */
+async function ipBucket(request: Request, kind: string): Promise<string> {
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+  return `${kind}:ip:${(await hashToken(`party-game-rl:${ip}`)).slice(0, 32)}`;
+}
+async function limit(rpc: Rpc, bucket: string, [max, windowSeconds]: readonly [number, number]) {
+  if (!(await rpc('rate_hit', { p_bucket: bucket, p_limit: max, p_window_seconds: windowSeconds }))) throw new ApiError('RATE_LIMITED');
+}
+
 type Issued = { room_id: string; code: string; player_id: string; version: number };
 /** Issue a fresh session token + recovery code; only their hashes reach the database. */
 async function issue(run: (credentialHash: string, recoveryHash: string) => Promise<Issued>, broadcast: Broadcast | null) {
@@ -124,6 +138,7 @@ export function createRoomHandler(rpc: Rpc, broadcast: Broadcast) {
   return guard(async (request) => {
     const input = await body(request);
     const nickname = normalizeNickname(input.nickname);
+    await limit(rpc, await ipBucket(request, 'create'), LIMITS.createPerIp);
     return issue(async (p_credential_hash, p_recovery_hash) => await rpc('room_create', { p_nickname: nickname.display, p_nickname_key: nickname.key, p_credential_hash, p_recovery_hash }) as Issued, broadcast);
   });
 }
@@ -132,6 +147,8 @@ export function joinRoomHandler(rpc: Rpc, broadcast: Broadcast) {
     const input = await body(request);
     const code = normalizeCode(input.room_code);
     const nickname = normalizeNickname(input.nickname);
+    await limit(rpc, await ipBucket(request, 'join'), LIMITS.joinPerIp);
+    await limit(rpc, `join:room:${code}`, LIMITS.joinPerRoom);
     return issue(async (p_credential_hash, p_recovery_hash) => await rpc('room_join', { p_code: code, p_nickname: nickname.display, p_nickname_key: nickname.key, p_credential_hash, p_recovery_hash }) as Issued, broadcast);
   });
 }
@@ -141,6 +158,8 @@ export function recoverHandler(rpc: Rpc) {
     const input = await body(request);
     const code = normalizeCode(input.room_code);
     const recoveryHash = await hashToken(normalizeRecoveryCode(input.recovery_code));
+    await limit(rpc, await ipBucket(request, 'recover'), LIMITS.recoverPerIp);
+    await limit(rpc, `recover:room:${code}`, LIMITS.recoverPerRoom);
     return issue(async (p_credential_hash, p_new_recovery_hash) => await rpc('player_recover', { p_code: code, p_recovery_hash: recoveryHash, p_credential_hash, p_new_recovery_hash }) as Issued, null);
   });
 }

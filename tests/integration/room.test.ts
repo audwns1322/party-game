@@ -3,7 +3,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { commandHandler, createRoomHandler, joinRoomHandler, recoverHandler, snapshotRoomHandler, type Rpc } from '../../supabase/functions/_shared/room';
+import { commandHandler, createRoomHandler, joinRoomHandler, LIMITS, recoverHandler, snapshotRoomHandler, type Rpc } from '../../supabase/functions/_shared/room';
 
 const db = new PGlite();
 const rpc: Rpc = async (fn, args) => {
@@ -19,7 +19,9 @@ const sent: Array<[string, number]> = [];
 const broadcast = async (room: string, version: number) => { sent.push([room, version]); };
 const api = { create: createRoomHandler(rpc, broadcast), join: joinRoomHandler(rpc, broadcast), recover: recoverHandler(rpc), snapshot: snapshotRoomHandler(rpc), command: commandHandler(rpc, broadcast) };
 type Session = { room_id: string; code: string; player_id: string; token: string; recovery_code: string };
-const post = (body: object, token?: string) => new Request('https://fn.test', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: JSON.stringify(body) });
+// Each request comes from a random client IP unless one is given, so rate limits do not interfere with other tests.
+const randomIp = () => `10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+const post = (body: object, token?: string, ip = randomIp()) => new Request('https://fn.test', { method: 'POST', headers: { 'x-forwarded-for': `${ip}, 10.0.0.1`, ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
 const create = async (nickname = '방장') => (await (await api.create(post({ nickname }))).json()) as Session;
 const join = (code: string, nickname: string) => api.join(post({ room_code: code, nickname }));
 const snapshot = (s: { token: string }, room: string) => api.snapshot(new Request(`https://fn.test?room_id=${room}`, { headers: { Authorization: `Bearer ${s.token}` } }));
@@ -28,7 +30,7 @@ const version = async (s: Session) => ((await (await snapshot(s, s.room_id)).jso
 
 beforeAll(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role;');
-  for (const file of ['20261021071859_m0_security_poc.sql', '20261024064956_m1_rooms_players.sql', '20261024080000_m1_hardening.sql']) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
+  for (const file of ['20261021071859_m0_security_poc.sql', '20261024064956_m1_rooms_players.sql', '20261024080000_m1_hardening.sql', '20261024090000_rate_limits.sql']) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
 }, 30000);
 afterAll(async () => { await db.close(); });
 beforeEach(() => { sent.length = 0; });
@@ -48,7 +50,7 @@ describe('database permissions', () => {
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(2);
+    expect(rows[0].n).toBe(3);
   });
 });
 
@@ -191,5 +193,32 @@ describe('hardening', () => {
     for (const bad of [0, -1, 2 ** 31, 1.5, '1']) expect((await command(host, host.room_id, 'update_settings', bad as number, { hint_rounds: 2 })).status).toBe(400);
     const res = await api.command(post({ room_id: host.room_id, action: 'heartbeat', expected_version: { x: 1 }, request_id: randomUUID() }, host.token));
     expect(res.status).toBe(200);
+  });
+});
+
+describe('row growth cap', () => {
+  it('a room stops accepting joins after 50 seats were ever used (join/leave churn)', async () => {
+    const host = await create('회전방장');
+    await db.query("update app_private.players set join_order = 50 where id = $1", [host.player_id]);
+    expect(await (await join(host.code, '늦은손님')).json()).toEqual({ error: 'ROOM_FULL' });
+  });
+});
+
+describe('rate limits', () => {
+  it('limits room creation and joins per client IP, and joins per room code', async () => {
+    const ip = '203.0.113.7';
+    for (let i = 0; i < LIMITS.createPerIp[0]; i++) expect((await api.create(post({ nickname: `생성${i}` }, undefined, ip))).status).toBe(200);
+    expect(await (await api.create(post({ nickname: '초과' }, undefined, ip))).json()).toEqual({ error: 'RATE_LIMITED' });
+    expect((await api.create(post({ nickname: '다른IP' }))).status).toBe(200);
+    const probe = '198.51.100.9';
+    let last = 0;
+    for (let i = 0; i <= LIMITS.joinPerIp[0]; i++) last = (await api.join(post({ room_code: '000000', nickname: `탐색${i}` }, undefined, probe))).status;
+    expect(last).toBe(429);
+    const { rows } = await db.query<{ n: number }>("select count(*)::int n from app_private.rate_limits where bucket like '%ip:%' and bucket ~ '^[a-z]+:ip:[0-9a-f]{32}$'");
+    expect(rows[0].n).toBeGreaterThan(0);
+  });
+  it('rate RPC is service_role only', async () => {
+    await db.exec('set role anon');
+    try { await expect(db.query("select public.rate_hit('x', 1, 60)")).rejects.toThrow(/permission denied/); } finally { await db.exec('reset role'); }
   });
 });

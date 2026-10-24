@@ -3,10 +3,17 @@ export type Session = { room_id: string; code: string; player_id: string; token:
 export type Issued = Session & { recovery_code: string };
 export type Settings = { word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300 };
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
+export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT';
+export type RoundSnapshot = {
+  id: string; phase: Exclude<GamePhase,'LOBBY'>; version: number; participant_ids: string[];
+  submitted_count: number; acknowledged_count: number;
+  me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null } | null;
+};
 export type RoomSnapshot = {
   room: { id: string; code: string; status: string; version: number; host_player_id: string; settings: Settings; locked: boolean; expires_at: string };
   me: { player_id: string; is_host: boolean };
   players: Player[];
+  round?: RoundSnapshot | null;
 };
 export class ApiError extends Error {
   constructor(readonly code: string, readonly status: number) { super(code); }
@@ -39,6 +46,8 @@ export const api = {
   snapshot: (s: Session) => call<RoomSnapshot>(`room-snapshot?room_id=${encodeURIComponent(s.room_id)}`, { headers: { Authorization: `Bearer ${s.token}` } }),
   command: (s: Session, action: string, expected_version?: number, payload?: object) =>
     call<{ version: number }>('room-command', json({ room_id: s.room_id, action, payload, expected_version, request_id: crypto.randomUUID() }, s.token)),
+  game: (s: Session, body: { action: string; payload: object; expected_version: number; expected_phase: GamePhase; request_id: string }) =>
+    call<{ version: number }>('game-command', json({ room_id: s.room_id, ...body }, s.token)),
 };
 
 const MESSAGES: Record<string, string> = {
@@ -52,6 +61,15 @@ const MESSAGES: Record<string, string> = {
   RECOVERY_FAILED: '복구 코드가 맞지 않아요.',
   HOST_ONLY: '방장만 할 수 있어요.',
   VERSION_CONFLICT: '방 상태가 바뀌었어요. 다시 시도해 주세요.',
+  PHASE_CONFLICT: '게임 단계가 바뀌었어요. 최신 화면에서 다시 시도해 주세요.',
+  REQUEST_CONFLICT: '요청 내용이 달라졌어요. 최신 상태를 확인해 주세요.',
+  PLAYER_COUNT: '게임은 3~12명일 때 시작할 수 있어요.',
+  PLAYERS_OFFLINE: '자리 비움인 참가자가 있어요. 모두 돌아온 후 시작해 주세요.',
+  ROUND_ACTIVE: '현재 판을 먼저 취소해 주세요.',
+  NOT_ROUND_PLAYER: '이번 판은 관전할 수 없어요. 다음 판을 기다려 주세요.',
+  INVALID_WORD: '공백을 제외한 2~30자의 단어를 입력해 주세요.',
+  ALREADY_SUBMITTED: '이미 단어를 제출했어요.',
+  ALREADY_ACKNOWLEDGED: '이미 역할을 확인했어요.',
   ROOM_CLOSED: '종료된 방이에요.',
   FORBIDDEN: '이 방의 참가자가 아니에요. 나갔거나 내보내졌을 수 있어요.',
   RATE_LIMITED: '요청이 너무 많아요. 몇 분 뒤에 다시 시도해 주세요.',

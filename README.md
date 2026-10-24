@@ -92,3 +92,9 @@ npm run test:integration  # 로컬 Supabase + functions:serve 필요
 로컬 데이터는 필요 시 별도 백업 후 삭제한다. POC SQL만 제거하려면 로컬 관리자 연결에서 `drop function public.m0_snapshot(text, uuid); drop schema m0_private cascade;`를 실행한다. 운영 프로젝트에는 POC를 적용하지 않는다. 로컬 컨테이너 중단은 `SUPABASE_HOME=$PWD/.cache/supabase npx supabase stop`(키 출력 주의). 다른 작업이 시작한 서비스를 중단하지 않는다.
 
 외부 프로젝트 연결 절차는 [EXTERNAL_SETUP.md](docs/EXTERNAL_SETUP.md), 명세 충돌과 보안 경계는 [DECISIONS.md](docs/DECISIONS.md), 검증 결과는 [TEST_MATRIX.md](docs/TEST_MATRIX.md)를 참고한다.
+
+## M2: 라운드와 역할 확인
+
+3~12명이 접속한 대기실에서 방장이 시작하면 기본 단어 배정 또는 직접 입력 후보 제출 → 역할 확인 → HINT까지 진행한다. 후보는 시민의 것만 선정하고 본인 역할만 반환하며 라이어에게 정답은 보내지 않는다. 중간 입장자는 다음 판 대기다. 현재 판 취소는 점수 없이 대기실로 돌아간다. 실제 힌트 진행·토론·투표는 후속 단계다.
+
+변경/검증/개발 배포/보류 항목은 [M2_VALIDATION.md](docs/M2_VALIDATION.md). 원격 테스트 `tests/integration/m2-remote.mjs`는 명시적인 개발 프로젝트 opt-in과 공개 key 설정이 필요하며, 이번 실행이 만든 테스트 방만 사용한다. Docker 설치는 필요 없다.

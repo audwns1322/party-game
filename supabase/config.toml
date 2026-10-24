@@ -1,4 +1,6 @@
 project_id = "party-game"
+[functions.game-command]
+verify_jwt = false
 [api]
 enabled = true
 port = 54321

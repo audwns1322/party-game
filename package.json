@@ -13,8 +13,8 @@
     "test:db": "SUPABASE_HOME=${SUPABASE_HOME:-$PWD/.cache/supabase} supabase test db",
     "test:integration": "node --test tests/integration/m0.mjs",
     "functions:serve": "SUPABASE_HOME=${SUPABASE_HOME:-$PWD/.cache/supabase} SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io supabase functions serve m0-snapshot",
-    "test:sql": "vitest run tests/integration/db.test.ts tests/integration/room.test.ts",
-    "typecheck:edge": "DENO_DIR=.cache/deno deno check --node-modules-dir=manual supabase/functions/*/index.ts"
+    "test:sql": "vitest run tests/integration/db.test.ts tests/integration/room.test.ts tests/integration/game.test.ts",
+    "typecheck:edge": "node scripts/check-edge.mjs"
   },
   "repository": {
     "type": "git",

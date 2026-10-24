@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError, type RoomSnapshot, type Session } from '../../lib/api';
+import { api, ApiError, type GamePhase, type RoomSnapshot, type Session } from '../../lib/api';
 import { subscribeToRoomVersion } from '../../lib/realtime';
 import { createPublicClient } from '../../lib/supabase';
 
@@ -22,6 +22,7 @@ export function useRoom(session: Session) {
   const refresh = useCallback(async () => {
     try {
       const next = await api.snapshot(session);
+      if (next.room.version < version.current) return;
       version.current = next.room.version;
       setSnapshot(next);
       setOnline(true);
@@ -81,5 +82,21 @@ export function useRoom(session: Session) {
     }
   }, [session, refresh]);
 
-  return { snapshot, fatal, online, run, refresh };
+  const pending = useRef<Parameters<typeof api.game>[1] | null>(null);
+  const runGame = useCallback(async (action: string, payload: object = {}) => {
+    if (!snapshot) return;
+    // Transport retries reuse the complete original request, including version and request_id.
+    const previous = pending.current;
+    const body = previous?.action === action && JSON.stringify(previous.payload) === JSON.stringify(payload) ? previous : {
+      action, payload, expected_version: version.current,
+      expected_phase: (snapshot.round?.phase ?? 'LOBBY') as GamePhase, request_id: crypto.randomUUID(),
+    };
+    pending.current = body;
+    try { await api.game(session,body); pending.current = null; }
+    catch (error) {
+      if (error instanceof ApiError && error.status > 0 && error.status < 500) pending.current = null;
+      throw error;
+    } finally { await refresh(); }
+  }, [session,snapshot,refresh]);
+  return { snapshot, fatal, online, run, runGame, refresh };
 }

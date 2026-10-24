@@ -6,13 +6,14 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   const [revealed,setRevealed] = useState(false);
   const [confirmCancel,setConfirmCancel] = useState(false);
   const round = snapshot.round!;
-  const [elapsed,setElapsed] = useState(0);
+  const [clock,setClock] = useState({ serverNow:snapshot.server_now, elapsed:0 });
   useEffect(() => {
     if (round.phase !== 'DISCUSS' || !round.deadline_at) return;
     const started = performance.now();
-    const timer = setInterval(() => setElapsed(performance.now()-started),250);
+    const timer = setInterval(() => setClock({serverNow:snapshot.server_now,elapsed:performance.now()-started}),250);
     return () => clearInterval(timer);
   }, [snapshot,round.phase,round.deadline_at]);
+  const elapsed = clock.serverNow === snapshot.server_now ? clock.elapsed : 0;
   const remaining = round.deadline_at && snapshot.server_now
     ? Math.max(0,Math.ceil((Date.parse(round.deadline_at)-Date.parse(snapshot.server_now)-elapsed)/1000)) : null;
   const currentName = snapshot.players.find(p => p.id === round.current_player_id)?.nickname;

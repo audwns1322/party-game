@@ -17,13 +17,13 @@
 | 서버 만료 | 통과 | SQL에서 기한을 지난 뒤 snapshot/heartbeat 각각 전환 검증, 위조 토큰 전환 불가, 후속 조회 중복 전환·Broadcast 없음 |
 | 비밀/회귀 | 통과 | DISCUSS/VOTE_1에서도 라이어 단어 null, 기존 M1/M2 회귀, M3→M2→M1 rollback 후 API 동작 |
 | 실제 개발 Supabase | 통과 | 원격 15개 검사. 3바퀴, 동시 동일 요청 replay, 발언자/방장 권한, 정지/재개, 무제한, 실제 60초 만료·동시 snapshot의 동일 version·서버 Broadcast 정확히 1회 |
-| 브라우저 | 통과(데스크톱) | 로컬 Vite→실제 개발 Edge/DB/Realtime. 방장 UI + 일회성 API 참가자 2명으로 시작→역할 확인→현재 발언자/힌트 완료→토론 타이머, 힌트 정지/재개 확인. 실제 휴대폰 3대 검증은 아님 |
+| 브라우저 | 통과(데스크톱) | 로컬 Vite→실제 개발 Edge/DB/Realtime. 방장 UI + 일회성 API 참가자 2명으로 시작→역할 확인→현재 발언자/힌트 완료→토론 타이머, 힌트·토론 정지/재개 확인. 실제 휴대폰 3대 검증은 아님 |
 | 원격 배포 | 완료 | migration `20261024135531_m3_hints_discussion`, game-command v3, room-command/room-snapshot v5. SQL whitespace 제외 MD5 로컬/원격 동일 |
 | 보안/성능 advisor | WARN/ERROR 없음 | 의도된 private RLS deny-all INFO 10개, 기존 미사용 인덱스 INFO 3개. 권한·RLS를 완화하지 않음 |
 
 ## 운영 및 검증 한계
 - 요청 시 기한 검증 방식(PRD 허용). DB 서버 시간만 전환을 결정한다. 인증 snapshot/heartbeat가 방 잠금 안에서 한 번 전환하고 공개 version만 Broadcast.
 - 접속자가 없으면 다음 인증 요청에서 만료 상태를 확정한다. 토론 중 클라이언트는 2초 간격 snapshot을 재조회하고, 시간 0 화면은 서버 응답을 기다린다.
-- 실제 60초를 기다린 원격 테스트 방은 종료·삭제, UUID 기준 잔여 0 확인. 사용자 기존 방은 변경하지 않았다.
+- 실제 60초를 기다린 원격 테스트 방은 종료·삭제, UUID 기준 잔여 0 확인. 별도 UI 테스트 방도 종료·삭제했다. 사용자 기존 방은 변경하지 않았다.
 - 모바일 실기기 레이아웃·다중 기기 인수, 장시간 장애/복귀 조합은 미완료. 연결 단절 자동 정지/방장 위임은 M6 범위.
 - M3 코드는 아직 main에 병합하지 않는다. M4 미착수.

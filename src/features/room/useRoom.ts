@@ -71,6 +71,17 @@ export function useRoom(session: Session) {
     };
   }, [session, refresh]);
 
+  useEffect(() => {
+    if (fatal || snapshot?.round?.phase !== 'DISCUSS' || !snapshot.round.deadline_at) return;
+    let active = false;
+    const timer = setInterval(async () => {
+      if (active || document.visibilityState !== 'visible') return;
+      active = true;
+      try { await refresh(); } finally { active = false; }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [fatal, snapshot?.round?.phase, snapshot?.round?.deadline_at, refresh]);
+
   /**
    * Run a versioned command. Lobby actions are intent-based, so a VERSION_CONFLICT caused by someone
    * joining is retried once against the fresh version. Game-phase commands (M2+) must NOT reuse this.

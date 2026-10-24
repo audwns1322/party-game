@@ -6,6 +6,17 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   const [revealed,setRevealed] = useState(false);
   const [confirmCancel,setConfirmCancel] = useState(false);
   const round = snapshot.round!;
+  const [elapsed,setElapsed] = useState(0);
+  useEffect(() => {
+    if (round.phase !== 'DISCUSS' || !round.deadline_at) return;
+    const started = performance.now();
+    const timer = setInterval(() => setElapsed(performance.now()-started),250);
+    return () => clearInterval(timer);
+  }, [snapshot,round.phase,round.deadline_at]);
+  const remaining = round.deadline_at && snapshot.server_now
+    ? Math.max(0,Math.ceil((Date.parse(round.deadline_at)-Date.parse(snapshot.server_now)-elapsed)/1000)) : null;
+  const currentName = snapshot.players.find(p => p.id === round.current_player_id)?.nickname;
+  const titles = { COLLECT_WORDS:'제시어 후보 제출', REVEAL_ROLE:'내 역할 확인', HINT:'차례대로 힌트', DISCUSS:'자유 토론', PAUSED_HOST:'잠시 멈췄어요', VOTE_1:'투표 준비' };
   useEffect(() => {
     if (!confirmCancel) return;
     const timer = setTimeout(() => setConfirmCancel(false),4000);
@@ -18,7 +29,7 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
     return () => { window.removeEventListener('blur',hide); document.removeEventListener('visibilitychange',hide); };
   }, []);
   return <section className="card" aria-labelledby="round-title">
-    <h2 id="round-title">{round.phase === 'COLLECT_WORDS' ? '제시어 후보 제출' : round.phase === 'REVEAL_ROLE' ? '내 역할 확인' : '역할 확인 완료'}</h2>
+    <h2 id="round-title">{titles[round.phase]}</h2>
     {!round.me ? <p>게임이 진행 중이에요. 다음 판부터 함께할 수 있어요.</p> : <>
       {round.phase === 'COLLECT_WORDS' ? <>
         <p>역할 공개 전, 모두 단어를 하나씩 제출해요. 라이어 후보는 선택에서 제외돼요.</p>
@@ -42,7 +53,18 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
           <button className="primary" disabled={busy || round.me.acknowledged} onClick={() => void run('ack_role',{round_id:round.id})}>
             {round.me.acknowledged ? '확인했어요 · 다른 참가자 기다리는 중' : '내 역할을 확인했어요'}</button>
         </>}
-        {round.phase === 'HINT' && <p role="status">모두 역할을 확인했어요. 힌트·토론 진행은 다음 개발 단계에서 연결됩니다.</p>}
+        {round.phase === 'HINT' && <>
+          <p role="status">힌트 {round.hint_round}/{round.hint_rounds}바퀴 · {currentName}님 차례</p>
+          <ol>{round.participant_ids.map(id => <li key={id} aria-current={id === round.current_player_id ? 'step' : undefined}>{snapshot.players.find(p => p.id === id)?.nickname}{id === round.current_player_id ? ' ← 현재 차례' : ''}</li>)}</ol>
+          {round.current_player_id === snapshot.me.player_id && <button className="primary" disabled={busy} onClick={() => void run('finish_hint',{round_id:round.id,hint_index:round.hint_index})}>힌트 말하기 완료</button>}
+        </>}
+        {round.phase === 'DISCUSS' && <>
+          <p role="timer">{remaining === null ? '시간 제한 없이 토론하세요.' : remaining > 0 ? '남은 시간 '+remaining+'초' : '시간 종료 · 서버에서 투표 단계를 준비하고 있어요.'}</p>
+          {snapshot.me.is_host && remaining === null && <button className="primary" disabled={busy} onClick={() => void run('start_vote',{round_id:round.id})}>토론 마치고 투표로</button>}
+        </>}
+        {round.phase === 'PAUSED_HOST' && <p role="status">방장이 진행을 멈췄어요.{round.remaining_ms !== null ? ' 남은 토론 시간 '+Math.ceil(round.remaining_ms/1000)+'초' : ''}</p>}
+        {round.phase === 'VOTE_1' && <p role="status">토론을 마쳤어요. 투표 기능은 M4에서 연결됩니다.</p>}
+        {snapshot.me.is_host && ['HINT','DISCUSS','PAUSED_HOST'].includes(round.phase) && <button disabled={busy} onClick={() => void run(round.phase === 'PAUSED_HOST' ? 'resume' : 'pause',{round_id:round.id})}>{round.phase === 'PAUSED_HOST' ? '이어서 진행' : '잠시 멈추기'}</button>}
       </>}
     </>}
     {snapshot.me.is_host && <button className="danger" disabled={busy} onClick={() => {

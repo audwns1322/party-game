@@ -154,6 +154,18 @@ async function finishAll(players:Issued[]) {
   throw new Error('Hint cursor did not finish');
 }
 describe('M3 server progression',()=>{
+  it('only the host can explicitly skip a timed discussion, with idempotent retry',async()=>{
+    const players=await hints();await finishAll(players);const host=players[0];const dto=await snapshot(host);const rid=dto.round!.id;
+    expect((await game(players[1],'start_vote',{round_id:rid,skip_timer:true})).status).toBe(403);
+    expect((await game(host,'start_vote',{round_id:rid,skip_timer:'true'})).status).toBe(409);
+    const overrides={expected_version:dto.room.version,expected_phase:'DISCUSS',request_id:randomUUID()};
+    const payload={round_id:rid,skip_timer:true};
+    const first=await game(host,'start_vote',payload,overrides);expect(first.status).toBe(200);
+    const result=await first.json();events.length=0;
+    expect(await (await game(host,'start_vote',payload,overrides)).json()).toEqual(result);expect(events).toHaveLength(0);
+    const after=await snapshot(host);expect(after.round!.phase).toBe('VOTE_1');expect(after.round!.deadline_at).toBeNull();expect(after.room.version).toBe(dto.room.version+1);
+    expect((await game(host,'start_vote',payload)).status).toBe(409);
+  });
   it.each([1,2,3])('completes exactly %i laps in frozen speaking order',async laps=>{
     const players=await hints(laps);const first=(await snapshot(players[0])).round!;
     for(let i=0;i<3*laps;i++) {

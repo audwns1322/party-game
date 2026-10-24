@@ -5,6 +5,7 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   const [word,setWord] = useState('');
   const [revealed,setRevealed] = useState(false);
   const [confirmCancel,setConfirmCancel] = useState(false);
+  const [confirmSkip,setConfirmSkip] = useState(false);
   const round = snapshot.round!;
   const [clock,setClock] = useState({ serverNow:snapshot.server_now, elapsed:0 });
   useEffect(() => {
@@ -23,6 +24,11 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
     const timer = setTimeout(() => setConfirmCancel(false),4000);
     return () => clearTimeout(timer);
   }, [confirmCancel]);
+  useEffect(() => {
+    if (!confirmSkip) return;
+    const timer = setTimeout(() => setConfirmSkip(false),4000);
+    return () => clearTimeout(timer);
+  }, [confirmSkip]);
   useEffect(() => {
     const hide = () => setRevealed(false);
     window.addEventListener('blur',hide);
@@ -61,7 +67,10 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
         </>}
         {round.phase === 'DISCUSS' && <>
           <p role="timer">{remaining === null ? '시간 제한 없이 토론하세요.' : remaining > 0 ? '남은 시간 '+remaining+'초' : '시간 종료 · 서버에서 투표 단계를 준비하고 있어요.'}</p>
-          {snapshot.me.is_host && remaining === null && <button className="primary" disabled={busy} onClick={() => void run('start_vote',{round_id:round.id})}>토론 마치고 투표로</button>}
+          {snapshot.me.is_host && <button className="primary" disabled={busy || remaining === 0} onClick={() => {
+            if (remaining === null || confirmSkip) void run('start_vote',{round_id:round.id,skip_timer:true});
+            else setConfirmSkip(true);
+          }}>{remaining === null ? '토론 마치고 투표로' : confirmSkip ? '한 번 더 누르면 토론을 끝내요' : '남은 시간 건너뛰기'}</button>}
         </>}
         {round.phase === 'PAUSED_HOST' && <p role="status">방장이 진행을 멈췄어요.{round.remaining_ms !== null ? ' 남은 토론 시간 '+Math.ceil(round.remaining_ms/1000)+'초' : ''}</p>}
         {round.phase === 'VOTE_1' && <p role="status">토론을 마쳤어요. 투표 기능은 M4에서 연결됩니다.</p>}

@@ -1,0 +1,18 @@
+{
+  "description": "Short development rules reference; read-only, no prompt storage",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "timeout": 5,
+            "additionalContextLimit": 1000,
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/reference-rules.mjs\"",
+            "type": "command",
+            "commandWindows": "powershell.exe -NoProfile -Command \"& node ((git rev-parse --show-toplevel) + '/scripts/reference-rules.mjs')\""
+          }
+        ]
+      }
+    ]
+  }
+}

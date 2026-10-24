@@ -4,6 +4,7 @@ import { messageFor, type Player, type Settings } from '../../lib/api';
 import { navigate } from '../../lib/router';
 import { clearSession, type StoredSession } from '../../lib/session';
 import { useRoom } from './useRoom';
+import { RoundPanel } from './RoundPanel';
 
 const MAX_PLAYERS = 12;
 const MIN_PLAYERS = 3;
@@ -36,7 +37,7 @@ function useRosterAnnouncement(players: Player[] | undefined, hostId: string | u
 }
 
 export function Lobby({ session }: { session: StoredSession }) {
-  const { snapshot, fatal, online, run, refresh } = useRoom(session);
+  const { snapshot, fatal, online, run, runGame, refresh } = useRoom(session);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -89,6 +90,11 @@ export function Lobby({ session }: { session: StoredSession }) {
   }
 
   const { room, me, players } = snapshot;
+  const round = snapshot.round;
+  const play = async (action: string,payload?: object) => {
+    setBusy(true); setError('');
+    try { await runGame(action,payload); } catch (e) { setError(messageFor(e)); } finally { setBusy(false); }
+  };
   const isHost = me.is_host;
   const setting = (patch: Partial<Settings>) => act('update_settings', patch);
 
@@ -116,9 +122,10 @@ export function Lobby({ session }: { session: StoredSession }) {
               <span className="name">{p.nickname}</span>
               {p.id === room.host_player_id && <span className="tag host">방장</span>}
               {p.id === me.player_id && <span className="tag">나</span>}
+              {p.status === 'waiting_next_round' && <span className="tag">다음 판 대기</span>}
               <span className={`tag ${p.connected ? 'on' : 'off'}`}>{p.connected ? '접속 중' : '자리 비움'}</span>
               {isHost && p.id !== me.player_id && (
-                <button type="button" className="mini" disabled={busy}
+                <button type="button" className="mini" disabled={busy || Boolean(round)}
                   onClick={() => (armed === `kick:${p.id}` ? void act('kick', { player_id: p.id }) : arm(`kick:${p.id}`))}>
                   {armed === `kick:${p.id}` ? '정말 내보내기' : '내보내기'}
                 </button>
@@ -130,27 +137,27 @@ export function Lobby({ session }: { session: StoredSession }) {
 
       {error && <p role="alert" className="error">{error}</p>}
       {notice && <p role="status" className="notice">{notice}</p>}
-      {isHost ? (
-        <button className="primary" disabled>
-          {players.length < MIN_PLAYERS ? `${MIN_PLAYERS}명 이상 모이면 시작할 수 있어요` : '게임 시작 (준비 중)'}
+      {round ? <RoundPanel key={`${round.id}:${round.phase}`} snapshot={snapshot} busy={busy} run={play} /> : isHost ? (
+        <button className="primary" disabled={busy || !online || players.length < MIN_PLAYERS || players.some(p => !p.connected)} onClick={() => void play('start_round')}>
+          {players.length < MIN_PLAYERS ? `${MIN_PLAYERS}명 이상 모이면 시작할 수 있어요` : '게임 시작 · 역할 배정'}
         </button>
       ) : <p className="hint">방장이 게임을 시작하면 자동으로 넘어가요.</p>}
 
       <details className="card" open={isHost}>
         <summary>게임 설정 {isHost ? '' : '(방장만 변경)'}</summary>
         <label>제시어
-          <select disabled={!isHost || busy} value={room.settings.word_mode} onChange={(e) => setting({ word_mode: e.target.value as Settings['word_mode'] })}>
+          <select disabled={!isHost || busy || Boolean(round)} value={room.settings.word_mode} onChange={(e) => setting({ word_mode: e.target.value as Settings['word_mode'] })}>
             <option value="builtin">기본 제시어</option>
             <option value="custom">직접 입력</option>
           </select>
         </label>
         <label>힌트 바퀴 수
-          <select disabled={!isHost || busy} value={room.settings.hint_rounds} onChange={(e) => setting({ hint_rounds: Number(e.target.value) as Settings['hint_rounds'] })}>
+          <select disabled={!isHost || busy || Boolean(round)} value={room.settings.hint_rounds} onChange={(e) => setting({ hint_rounds: Number(e.target.value) as Settings['hint_rounds'] })}>
             {[1, 2, 3].map((n) => <option key={n} value={n}>{n}바퀴</option>)}
           </select>
         </label>
         <label>토론 시간
-          <select disabled={!isHost || busy} value={room.settings.discussion_seconds} onChange={(e) => setting({ discussion_seconds: Number(e.target.value) as Settings['discussion_seconds'] })}>
+          <select disabled={!isHost || busy || Boolean(round)} value={room.settings.discussion_seconds} onChange={(e) => setting({ discussion_seconds: Number(e.target.value) as Settings['discussion_seconds'] })}>
             {[60, 120, 180, 300].map((s) => <option key={s} value={s}>{s / 60}분</option>)}
             <option value={0}>무제한</option>
           </select>
@@ -171,7 +178,7 @@ export function Lobby({ session }: { session: StoredSession }) {
         </details>
       )}
 
-      <button type="button" disabled={busy}
+      <button type="button" disabled={busy || Boolean(round?.me)}
         onClick={() => (armed === 'leave' ? void act('leave').then((ok) => { if (ok) { clearSession(session.code); navigate('/'); } }) : arm('leave'))}>
         {armed === 'leave' ? '한 번 더 누르면 나가요' : '방 나가기'}
       </button>

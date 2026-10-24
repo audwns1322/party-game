@@ -1,6 +1,6 @@
 // M1 room lifecycle through the real Edge handlers + the real migration on embedded PostgreSQL.
 import { PGlite } from '@electric-sql/pglite';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { commandHandler, createRoomHandler, joinRoomHandler, LIMITS, recoverHandler, snapshotRoomHandler, type Rpc } from '../../supabase/functions/_shared/room';
@@ -30,7 +30,7 @@ const version = async (s: Session) => ((await (await snapshot(s, s.room_id)).jso
 
 beforeAll(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role;');
-  for (const file of ['20261021071859_m0_security_poc.sql', '20261024064956_m1_rooms_players.sql', '20261024075949_m1_hardening.sql', '20261024080006_rate_limits.sql']) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
+  for (const file of (await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort()) await db.exec(await readFile(`supabase/migrations/${file}`, 'utf8'));
 }, 30000);
 afterAll(async () => { await db.close(); });
 beforeEach(() => { sent.length = 0; });
@@ -50,7 +50,7 @@ describe('database permissions', () => {
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(3);
+    expect(rows[0].n).toBe(9);
   });
 });
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError, type RoomSnapshot, type Session } from '../../lib/api';
+import { api, ApiError, type GamePhase, type RoomSnapshot, type Session } from '../../lib/api';
 import { subscribeToRoomVersion } from '../../lib/realtime';
 import { createPublicClient } from '../../lib/supabase';
 
@@ -10,6 +10,11 @@ const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const realtime = url && key ? createPublicClient(url, key) : null;
 
 const isFatal = (error: unknown) => error instanceof ApiError && (error.status === 401 || error.status === 403 || error.status === 410);
+type GameRequest = Parameters<typeof api.game>[1];
+export function canReuseGameRequest(previous: GameRequest | null, current: Omit<GameRequest,'request_id'>): previous is GameRequest {
+  return previous?.action === current.action && previous.expected_version === current.expected_version
+    && previous.expected_phase === current.expected_phase && JSON.stringify(previous.payload) === JSON.stringify(current.payload);
+}
 
 /** Server snapshot is the only source of truth. Realtime and heartbeat only trigger a re-fetch. */
 export function useRoom(session: Session) {
@@ -22,6 +27,7 @@ export function useRoom(session: Session) {
   const refresh = useCallback(async () => {
     try {
       const next = await api.snapshot(session);
+      if (next.room.version < version.current) return;
       version.current = next.room.version;
       setSnapshot(next);
       setOnline(true);
@@ -81,5 +87,22 @@ export function useRoom(session: Session) {
     }
   }, [session, refresh]);
 
-  return { snapshot, fatal, online, run, refresh };
+  const pending = useRef<Parameters<typeof api.game>[1] | null>(null);
+  const runGame = useCallback(async (action: string, payload: object = {}) => {
+    if (!snapshot) return;
+    // Transport retries reuse the complete original request, including version and request_id.
+    const previous = pending.current;
+    const current = {
+      action, payload, expected_version: version.current,
+      expected_phase: (snapshot.round?.phase ?? 'LOBBY') as GamePhase,
+    };
+    const body = canReuseGameRequest(previous,current) ? previous : { ...current, request_id:crypto.randomUUID() };
+    pending.current = body;
+    try { await api.game(session,body); pending.current = null; }
+    catch (error) {
+      if (error instanceof ApiError && error.status > 0 && error.status < 500) pending.current = null;
+      throw error;
+    } finally { await refresh(); }
+  }, [session,snapshot,refresh]);
+  return { snapshot, fatal, online, run, runGame, refresh };
 }

@@ -34,3 +34,15 @@
 Docker daemon의 storage driver가 vfs이며 전체 디스크 32GB다. 공식 Postgres 17.11 이미지(검증된 레지스트리 manifest 기준 29개 레이어, 압축 약 351MB)를 해제할 때 누적 복제로 디스크가 가득 찼다. 설치 프로세스를 중단하자 미완료 레이어가 해제되어 여유 공간 약 21GB로 복구됐다. 서비스는 시작되지 않았고 실행 중 컨테이너는 없다. 다른 작업의 파일/컨테이너를 삭제하지 않았다. DB major 15의 최신 이미지도 유사한 레이어 규모라 근거 없는 다운그레이드는 하지 않는다.
 
 PGlite(임베디드 실제 PostgreSQL/WASM)에 같은 마이그레이션을 적용해 GRANT/REVOKE, RLS 활성화, 실제 서버 핸들러→SQL RPC의 본인 정보/라이어 단어 차단, 자격 교체/폐기 테스트를 추가했다. 이 테스트는 Supabase gateway, Edge 런타임 HTTP, Realtime WebSocket을 검증하지 않는다. 해당 통합은 미완료로 남긴다. Deno CLI로 실제 Edge 진입점 타입 검사도 별도 수행한다.
+
+# 설계 결정 — M1 (2026-10-24)
+
+1. **비공개 스키마 + service_role 전용 RPC:** `app_private.rooms/players`는 PostgREST 비노출, anon/authenticated 권한 회수, RLS 활성(정책 없음 = 전면 거부). Edge만 `public.room_*` RPC를 호출하고 RPC가 토큰 해시·방·상태를 직접 재검증한다. SECURITY DEFINER + 빈 search_path.
+2. **불변식은 DB에서:** 방장 ∈ 같은 방 참가자(복합 FK, deferrable), 열린 방끼리 코드 고유(부분 unique), 방 내 활성 닉네임 대소문자 무시 고유, 12명 상한은 방 행 잠금 후 검사.
+3. **세션/복구:** 토큰 256비트 hex, 복구 코드 128비트(Crockford base32 26자, 4자 묶음). DB에는 SHA-256 해시만. 복구 성공 시 **토큰과 복구 코드 둘 다 회전** → 기존 기기 즉시 403. 복구 코드는 앱에 저장하지 않고 발급 직후 1회만 표시.
+4. **버전과 동기화:** 상태 변경마다 `rooms.version` 증가. Realtime은 `{room_id, version}` 힌트만(REST broadcast, 실패해도 명령 성공). 클라이언트는 10초 heartbeat 응답의 version으로도 변경을 감지해 스냅샷을 재조회한다 → Realtime이 끊겨도 동작.
+5. **heartbeat는 활동 아님:** 연결 표시(30초)만 갱신하고 2시간 만료 시계는 늘리지 않는다. 만료된 방은 모든 RPC에서 닫힌 방으로 취급(정리 스케줄러는 M6).
+6. **대기실 명령 충돌 재시도:** 참가자 입장도 version을 올리므로 방장 설정 변경이 자주 409가 된다. `update_settings/leave/close_room`만 클라이언트가 최신 version으로 **1회 재시도**. M2 이후 게임 명령에는 적용하지 않는다(오래된 의도는 실제 충돌).
+7. **방장 이탈:** 명시적 `leave`는 즉시 입장 순서상 다음 참가자에게 위임, 남은 사람이 없으면 방 종료. 연결 끊김에 의한 30초 지연 위임은 M6.
+8. **보류:** `command_receipts` 멱등 처리(request_id는 이미 필수), API 속도 제한·방 코드 브루트포스 방어(M6/M7), 중간 입장자 `waiting_next_round`(M2).
+9. **마이그레이션 파일명 = 원격 적용 버전**(`20261021071859`, `20261024064956`)으로 맞춰 CLI 이력 불일치를 방지한다.

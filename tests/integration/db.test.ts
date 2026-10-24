@@ -8,7 +8,7 @@ const citizen = newToken();
 const liar = newToken();
 beforeAll(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role;');
-  await db.exec(await readFile('supabase/migrations/20261021000000_m0_security_poc.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261021071859_m0_security_poc.sql', 'utf8'));
   await db.query("insert into m0_private.sessions(player_id,room_id,credential_hash,role,word) values ('00000000-0000-4000-8000-000000000011',$1,$2,'citizen','사과'),('00000000-0000-4000-8000-000000000012',$1,$3,'liar','사과')", [room, await hashToken(citizen), await hashToken(liar)]);
 }, 20000);
 afterAll(async () => { await db.close(); });

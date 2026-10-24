@@ -29,11 +29,11 @@ export function publicVersionEvent(roomId: string, version: number): VersionEven
   return { room_id: roomId, version };
 }
 
-export function withCors(handler: (request: Request) => Promise<Response>, allowedOrigins: string[]) {
+export function withCors(handler: (request: Request) => Promise<Response>, allowedOrigins: string[], methods = 'GET, OPTIONS') {
   return async (request: Request): Promise<Response> => {
     const origin = request.headers.get('Origin');
     if (origin && !allowedOrigins.includes(origin)) return Response.json({ error: 'ORIGIN_DENIED' }, { status: 403 });
-    const headers = new Headers({ 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type' });
+    const headers = new Headers({ 'Vary': 'Origin', 'Access-Control-Allow-Methods': methods, 'Access-Control-Allow-Headers': 'authorization, apikey, content-type' });
     if (origin) headers.set('Access-Control-Allow-Origin', origin);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
     const response = await handler(request);

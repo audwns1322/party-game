@@ -1,18 +1,25 @@
 # 모두의 파티 — 라이어 게임 플랫폼
 
-React + TypeScript + Vite / Supabase / Vercel. 현재 범위는 **M0 개발 기반 및 보안 POC**다. **M0는 부분 완료**이며 Docker vfs/32GB 디스크 제약으로 실제 Supabase Edge·Realtime 통합 검증이 남아 있다. 게임방·투표·복구·배포 기능은 아직 없다. 방 생성·참가 버튼은 준비 중으로 비활성화되어 있다.
+React + TypeScript + Vite / Supabase / Vercel. 현재 **M1(방 생성·참가·대기실·재접속) 구현 완료, 실기기 검증 전**. 게임 진행(M2~)은 아직 없다. 진행 상태는 `docs/HANDOFF.md`.
 
 ## 시작
 
-Node 24 (`.nvmrc`: 검증 버전 24.19.0), npm 11, Docker daemon 필요. 이 클라우드의 체크아웃 `/workspace/party-game`을 사용한다. 각 클라우드 작업은 이미 격리되어 있으므로 새 worktree를 만들지 않는다.
+Node 24 (`.nvmrc`: 24.19.0), npm.
 
 ```sh
-cd /workspace/party-game
 npm ci
-npm run dev
+cp .env.example .env.local   # 개발 Supabase URL + publishable 키 입력
+npm run dev                  # http://localhost:5173
 ```
 
-개발 서버 기본 포트 5173. 화면 실행에는 원격 Supabase가 필요 없다.
+검사: `npm run typecheck && npm run typecheck:edge && npm run lint && npm test && npm run test:sql && npm run build`.
+`test:sql`은 실제 마이그레이션을 임베디드 PostgreSQL(PGlite)에 적용하고 실제 Edge 핸들러로 검증한다.
+
+### 휴대폰에서 확인하기
+
+Edge 함수는 `APP_ALLOWED_ORIGINS`에 등록된 origin만 허용한다(기본: localhost:5173). 같은 Wi-Fi의 휴대폰에서
+`http://<PC IP>:5173`으로 접속하려면 그 origin을 Supabase Functions secret `APP_ALLOWED_ORIGINS`에 추가하거나,
+Vercel 미리보기 HTTPS 주소를 등록해야 한다.
 
 ## 환경변수
 

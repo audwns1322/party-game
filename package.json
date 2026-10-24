@@ -13,8 +13,8 @@
     "test:db": "SUPABASE_HOME=${SUPABASE_HOME:-$PWD/.cache/supabase} supabase test db",
     "test:integration": "node --test tests/integration/m0.mjs",
     "functions:serve": "SUPABASE_HOME=${SUPABASE_HOME:-$PWD/.cache/supabase} SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io supabase functions serve m0-snapshot",
-    "test:sql": "vitest run tests/integration/db.test.ts",
-    "typecheck:edge": "DENO_DIR=.cache/deno deno check --node-modules-dir=manual supabase/functions/m0-snapshot/index.ts"
+    "test:sql": "vitest run tests/integration/db.test.ts tests/integration/room.test.ts",
+    "typecheck:edge": "DENO_DIR=.cache/deno deno check --node-modules-dir=manual supabase/functions/*/index.ts"
   },
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
   "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",
+    "qrcode": "1.5.4",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -30,6 +31,7 @@
     "@electric-sql/pglite": "0.5.10",
     "@eslint/js": "10.0.1",
     "@types/node": "24.19.2",
+    "@types/qrcode": "1.5.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",

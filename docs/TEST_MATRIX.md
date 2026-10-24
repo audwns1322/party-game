@@ -44,3 +44,19 @@ Docker overlay2 등 효율적인 저장 드라이버 또는 충분한 디스크�
 | 13 | 전적 단일 반영 | M5 |
 | 14 | 종료/만료 접근 차단 및 삭제 | M6 |
 | 15 | iOS/Android 실기기 UI | M7 |
+
+# 검증 결과 — M1 (2026-10-24)
+
+| 검증 | 결과 | 근거/한계 |
+| --- | --- | --- |
+| 로컬 검사 | 통과 | typecheck, typecheck:edge(함수 6개), lint, 단위 15개, SQL 통합 12개(M1 9개), build |
+| DB 권한 (PGlite + 원격) | 통과 | anon/authenticated: app_private 테이블·RPC 전부 거부, service_role만 public RPC. 원격은 권한 매트릭스 쿼리로 확인 |
+| 정원·닉네임 (ROOM-01) | 통과 | 12명 후 13번째 ROOM_FULL, 대소문자 무시 중복 NICKNAME_TAKEN, 없는 코드 ROOM_NOT_FOUND |
+| 인증·권한 (SEC-01, SEC-03) | 통과 | 타 방/미등록/누락 토큰 거부, 비방장 설정·종료 HOST_ONLY, 잘못된 설정 400, 오래된 version 409 |
+| 복구·회전 | 통과 | 복구 후 이전 토큰·복구 코드 모두 거부, 새 토큰 동작 (로컬+원격) |
+| 방장 위임·종료·만료 | 통과 | leave 시 다음 순서 위임, 종료/만료 후 스냅샷 410·참가 404·복구 403 |
+| 원격 RPC 동작 | 통과 | 롤백 트랜잭션으로 생성·참가·중복·위조·복구·종료 확인, 잔여 행 0. 보안 advisor는 의도된 deny-all INFO만 |
+| Edge 배포 | 통과 | room-create/join/player-recover/room-snapshot/room-command v1, verify_jwt=false(내부 인증). 배포본 = 브랜치 코드 |
+| 브라우저 흐름 (헤드리스 Chromium, 모바일 뷰포트 3대) | 통과 | 실제 핸들러+마이그레이션 로컬 서버로 생성→복구 코드 표시→참가 2명→중복 닉네임 오류→방장 설정이 손님 화면 반영·손님은 수정 불가→새로고침 자동 복구→다른 기기 복구 후 이전 기기 차단 |
+| 원격 Edge HTTP / Realtime 실송수신 | 미실행 | 클라우드 세션에서 *.supabase.co 직접 요청 차단 |
+| 실기기 3대 (M1 완료 조건) | 미실행 | 휴대폰 origin을 APP_ALLOWED_ORIGINS에 등록하거나 Vercel 미리보기 필요 |

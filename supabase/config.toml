@@ -36,3 +36,13 @@ deno_version = 2
 enabled = false
 [functions.m0-snapshot]
 verify_jwt = false
+[functions.room-create]
+verify_jwt = false
+[functions.room-join]
+verify_jwt = false
+[functions.player-recover]
+verify_jwt = false
+[functions.room-snapshot]
+verify_jwt = false
+[functions.room-command]
+verify_jwt = false

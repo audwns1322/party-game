@@ -32,19 +32,25 @@ export function useRoom(session: Session) {
 
   useEffect(() => {
     let stopped = false;
+    let ticks = 0;
+    const stop = () => { stopped = true; clearInterval(timer); };
     const beat = async () => {
+      if (stopped) return;
       try {
         const { version: latest } = await api.command(session, 'heartbeat');
         if (stopped) return;
         setOnline(true);
-        if (latest !== version.current) await refresh();
+        // Presence ("접속 중/자리 비움") changes without a version bump, so re-read it every ~30s too.
+        ticks += 1;
+        if (latest !== version.current || ticks % 3 === 0) await refresh();
       } catch (error) {
         if (stopped) return;
-        if (isFatal(error)) setFatal(error as ApiError); else setOnline(false);
+        // Closed room / kicked / rotated: stop polling instead of retrying forever.
+        if (isFatal(error)) { stop(); setFatal(error as ApiError); } else setOnline(false);
       }
     };
-    void refresh().then(beat);
     const timer = setInterval(beat, HEARTBEAT_MS);
+    void refresh().then(beat);
     const wake = () => { if (document.visibilityState === 'visible') void beat(); };
     const offline = () => setOnline(false);
     document.addEventListener('visibilitychange', wake);
@@ -52,7 +58,7 @@ export function useRoom(session: Session) {
     addEventListener('offline', offline);
     const unsubscribe = realtime ? subscribeToRoomVersion(realtime, session.room_id, () => void refresh()) : () => undefined;
     return () => {
-      stopped = true; clearInterval(timer);
+      stop();
       document.removeEventListener('visibilitychange', wake);
       removeEventListener('online', wake); removeEventListener('offline', offline);
       void unsubscribe();

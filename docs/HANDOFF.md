@@ -7,6 +7,15 @@
 - 사용자가 새 채팅에서 이어서 작업하기 위해 현재 초안을 GitHub 별도 브랜치에 업로드하도록 요청했다.
 - 이 초안은 실행 가능한 기본 화면과 보안 POC다. 방 생성/참가 버튼은 비활성화 상태이며 완성된 게임이 아니다.
 
+## 2026-10-24 갱신 (Claude 세션)
+
+- 개발용 Supabase `party-game-dev`(wmgpshtqqsqwgyigxcwl)에 M0 migration과 Edge `m0-snapshot`이 **이미 배포돼 있음**을 확인. 내용은 브랜치 파일과 동일(CRLF 차이만). 아래 차단 요인 2–4의 "원격 미연결" 서술은 이 시점 기준으로 대체된다.
+- Supabase MCP로 원격 DB 권한·RPC 동작 검증 통과(TEST_MATRIX 참고). 테스트 픽스처는 롤백 트랜잭션에서만 생성, 잔여 행 0.
+- Node 24.19.0으로 `npm ci`, typecheck, typecheck:edge, lint, 단위 10개, SQL 3개, build 재통과.
+- `.env.local`에 원격 URL + publishable 키 재등록(Git 제외).
+- **남은 M0 항목:** 원격 Edge HTTP 호출과 Realtime 송수신 실검증. 이 클라우드 세션은 `*.supabase.co` 직접 요청이 프록시에서 차단된다. 사용자 PC 실행 또는 네트워크 허용 목록 추가가 필요하다.
+- GitHub 푸시 권한이 이 세션에 없어 변경은 로컬 커밋으로만 남아 있다.
+
 ## 먼저 읽을 문서
 
 1. docs/PRD_FINAL_v1.0.md

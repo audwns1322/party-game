@@ -1,4 +1,4 @@
-# 검증 결과 — M0 (2026-10-21)
+# 검증 결과 — M0 (2026-10-21, 원격 항목 2026-10-24 추가)
 
 **마일스톤 상태: 부분 완료. M1 미착수.** 실제 Supabase 스택 시작에 실패하여 M0 전체 인수 조건을 충족했다고 주장하지 않는다.
 
@@ -18,7 +18,10 @@
 | Supabase pgTAP 12개 | 미실행 | tests SQL 작성됨. 스택 시작 전에는 실제 통과 아님 |
 | 실제 Edge→PostgREST→Postgres HTTP | 미실행 | tests/integration/m0.mjs 작성됨. 임베디드 테스트가 이를 대신하지 않음 |
 | 실제 Realtime WebSocket 송수신 | 미실행 | payload/수신 파서 단위 테스트만 통과. 실제 송수신 테스트는 위 통합 파일 |
-| 원격 Supabase/Vercel/실기기 | 미실행 | 프로젝트 미연결, 배포 안 함 |
+| 원격 Supabase 배포본 일치 | 통과 (2026-10-24) | party-game-dev에 migration `20261021071859_m0_security_poc`·Edge `m0-snapshot` v1(verify_jwt=false) 배포됨. 내용이 브랜치 파일과 동일(CRLF 차이만) |
+| 원격 DB 권한 (Supabase MCP SQL) | 통과 (2026-10-24) | anon/authenticated: m0_private 스키마·테이블·RPC 권한 없음, service_role만 RPC 실행. RLS 활성, SECURITY DEFINER + 빈 search_path. 보안 advisor는 의도된 deny-all(`rls_enabled_no_policy` INFO)만 보고 |
+| 원격 RPC 동작 (롤백 트랜잭션) | 통과 (2026-10-24) | 시민 본인 단어 조회, 라이어 단어 null, 타 방/미등록/폐기 자격 null. 트랜잭션 rollback 후 잔여 행 0 |
+| 원격 Edge HTTP / Realtime / Vercel / 실기기 | 미실행 | 클라우드 세션에서 *.supabase.co 직접 요청이 프록시에서 차단(HTTP 000). Vercel 배포 안 함 |
 | GitHub Actions | 미실행 | workflow 작성, 로컬 동일 검사 통과. push/원격 CI 실행 안 함 |
 
 ## M0를 마치기 위한 재검증

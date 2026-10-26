@@ -1,12 +1,18 @@
 // Browser API client for the room Edge Functions. Credentials go in headers only.
 export type Session = { room_id: string; code: string; player_id: string; token: string };
 export type Issued = Session & { recovery_code: string };
-export type Settings = { word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300 };
+export const THEMES = ['음식','동물','생활용품','장소','취미','자연','운동','크로스핏','여행'] as const;
+export type Settings = {
+  word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300;
+  theme?: 'random' | typeof THEMES[number]; custom_theme?: string;
+  game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard';
+};
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
 export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'VOTE_1';
 export type RoundSnapshot = {
   id: string; phase: Exclude<GamePhase,'LOBBY'>; version: number; participant_ids: string[];
   submitted_count: number; acknowledged_count: number;
+  theme?: string; game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard';
   hint_index: number; hint_round: number; hint_rounds: number; current_player_id: string | null;
   deadline_at: string | null; remaining_ms: number | null; paused_phase: 'HINT' | 'DISCUSS' | null;
   me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null } | null;
@@ -74,6 +80,7 @@ const MESSAGES: Record<string, string> = {
   ROUND_ACTIVE: '현재 판을 먼저 취소해 주세요.',
   NOT_ROUND_PLAYER: '이번 판은 관전할 수 없어요. 다음 판을 기다려 주세요.',
   INVALID_WORD: '공백을 제외한 2~30자의 단어를 입력해 주세요.',
+  INVALID_SETTINGS: '테마와 게임 설정을 확인해 주세요. 직접 입력은 테마가 필요하며 기본 라이어로 진행해요.',
   ALREADY_SUBMITTED: '이미 단어를 제출했어요.',
   ALREADY_ACKNOWLEDGED: '이미 역할을 확인했어요.',
   ROOM_CLOSED: '종료된 방이에요.',

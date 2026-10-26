@@ -61,7 +61,7 @@ try {
     }
   }
   const players=await make(3);const host=players[0];let d=await snapshot(host);
-  assert.equal((await call('room-command',{room_id:host.room_id,action:'update_settings',payload:{word_mode:'custom'},expected_version:d.room.version,request_id:randomUUID()},host)).status,200);
+  assert.equal((await call('room-command',{room_id:host.room_id,action:'update_settings',payload:{word_mode:'custom',custom_theme:'음식'},expected_version:d.room.version,request_id:randomUUID()},host)).status,200);
   assert.equal((await command(host,'start_round')).status,200);d=await snapshot(host);
   for(let i=0;i<players.length;i++){
     assert.equal((await snapshot(players[i])).round.me.role,null);

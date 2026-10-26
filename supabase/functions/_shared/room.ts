@@ -192,6 +192,11 @@ export function commandHandler(rpc: Rpc, broadcast: Broadcast) {
     if (expected !== null && !(Number.isInteger(expected) && (expected as number) >= 1 && (expected as number) <= MAX_INT)) throw new ApiError('INVALID_REQUEST');
     const payload = input.payload ?? {};
     if (typeof payload !== 'object' || Array.isArray(payload)) throw new ApiError('INVALID_REQUEST');
+    if (input.action === 'update_settings' && 'custom_theme' in payload && typeof payload.custom_theme === 'string') {
+      const theme = payload.custom_theme.normalize('NFC').trim();
+      if ([...theme].length > 30 || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(theme)) throw new ApiError('INVALID_SETTINGS');
+      payload.custom_theme = theme;
+    }
     const result = await rpc('room_command', { p_credential_hash: await hashToken(token), p_room: room, p_action: input.action, p_payload: payload, p_expected_version: expected }) as { version: number; changed: boolean };
     if (result.changed) await notify(broadcast, room, result.version);
     return reply(200, { version: result.version });

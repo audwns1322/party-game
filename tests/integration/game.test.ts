@@ -83,7 +83,7 @@ describe('M2 assignment and secrecy',()=>{
 describe('M2 custom words and transitions',()=>{
   it('collects everyone once, hides all roles before reveal, excludes liar candidate and transitions on final ack',async()=>{
     const players=await room();const host=players[0];let dto=await snapshot(host);
-    expect((await api.room(request({room_id:host.room_id,action:'update_settings',payload:{word_mode:'custom'},expected_version:dto.room.version,request_id:randomUUID()},host.token))).status).toBe(200);
+    expect((await api.room(request({room_id:host.room_id,action:'update_settings',payload:{word_mode:'custom',custom_theme:'음식'},expected_version:dto.room.version,request_id:randomUUID()},host.token))).status).toBe(200);
     await game(host,'start_round');dto=await snapshot(host);const rid=dto.round!.id;
     const {rows}=await db.query<{player_id:string}>('select player_id from app_private.round_players where round_id=$1 and role=\'liar\'',[rid]);const liar=rows[0].player_id;
     for(const p of players){const d=await snapshot(p);expect(d.round!.me!.role).toBeNull();expect(d.round!.me!.word).toBeNull();}
@@ -108,13 +108,14 @@ describe('M2 custom words and transitions',()=>{
     }
     const [host]=await room();await game(host,'start_round');const rid=(await snapshot(host)).round!.id;
     await expect(db.query('update app_private.round_players set role=\'citizen\' where round_id=$1',[rid])).rejects.toThrow(/INVALID_ASSIGNMENT/);
-    const {rows}=await db.query<{n:number}>('select count(*)::int n from app_private.builtin_words');expect(rows[0].n).toBe(75);
+    const {rows}=await db.query<{n:number}>('select count(*)::int n from app_private.builtin_words');expect(rows[0].n).toBe(135);
   });
   it('rollback SQL removes only M2 and restores the M1 service-role API',async()=>{
     const restored=new PGlite();
     try {
       await restored.exec('create role anon; create role authenticated; create role service_role;');
       for(const file of (await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort())await restored.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
+      await restored.exec(await readFile('supabase/rollback/themes_word_modes.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m3.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m2.sql','utf8'));
       await restored.exec('set role service_role');
@@ -226,5 +227,49 @@ describe('M3 server progression',()=>{
     expect((await api.snapshot(new Request('https://test.invalid?room_id='+host.room_id,{headers:{Authorization:'Bearer '+ 'f'.repeat(64)}}))).status).toBe(403);
     events.length=0;expect((await api.room(request({room_id:host.room_id,action:'heartbeat',request_id:randomUUID()},host.token))).status).toBe(200);expect(events).toHaveLength(1);
     expect((await snapshot(host)).round!.phase).toBe('VOTE_1');
+  });
+});
+async function settings(s:Issued,payload:object) {
+  const d=await snapshot(s);
+  return api.room(request({room_id:s.room_id,action:'update_settings',payload,expected_version:d.room.version,request_id:randomUUID()},s.token));
+}
+describe('themes and confusion liar',()=>{
+  it.each(['음식','동물','생활용품','장소','취미','자연','운동','크로스핏','여행'])('selects only %s words with private classic/easy/hard assignments',async theme=>{
+    const players=await room();const host=players[0];
+    for(const mode of ['classic','easy','hard']) {
+      expect((await settings(host,{theme,game_mode:mode==='classic'?'classic':'confusion',difficulty:mode==='hard'?'hard':'easy'})).status).toBe(200);
+      expect((await game(host,'start_round')).status).toBe(200);
+      const r=(await snapshot(host)).round!;
+      const {rows}=await db.query<{word:string;liar_word:string|null;easy_word:string;hard_word:string}>(`select s.word,s.liar_word,w.easy_word,w.hard_word from app_private.round_secrets s join app_private.builtin_words w on w.category=s.category and w.word=s.word where s.round_id=$1`,[r.id]);
+      expect(rows[0].liar_word).toBe(mode==='classic'?null:mode==='easy'?rows[0].easy_word:rows[0].hard_word);
+      for(const p of players){const own=(await snapshot(p)).round!;expect(own.theme).toBe(theme);expect(own.game_mode).toBe(mode==='classic'?'classic':'confusion');expect(own.me!.word).toBe(own.me!.role==='liar'?rows[0].liar_word:rows[0].word);expect(Object.keys(own.me!).sort()).toEqual(['acknowledged','role','submitted','word']);}
+      expect((await game(host,'cancel_round')).status).toBe(200);
+    }
+  });
+  it('validates settings and requires a custom theme while keeping single-word submission',async()=>{
+    const players=await room();const host=players[0];
+    expect((await settings(players[1],{theme:'운동'})).status).toBe(403);
+    for(const payload of [{theme:'없는테마'},{theme:null},{game_mode:'unknown'},{difficulty:null},{word_mode:null},{hint_rounds:null},{discussion_seconds:null},{custom_theme:3},{custom_theme:'가'.repeat(31)},{custom_theme:'음식\u200b'},{word_mode:'custom',game_mode:'confusion'}])expect((await settings(host,payload)).status).toBe(400);
+    await settings(host,{word_mode:'custom'});expect(await (await game(host,'start_round')).json()).toEqual({error:'INVALID_SETTINGS'});
+    expect((await settings(host,{custom_theme:'  우리 학교  '})).status).toBe(200);
+    expect((await game(host,'start_round')).status).toBe(200);const r=(await snapshot(host)).round!;
+    expect(r.theme).toBe('우리 학교');expect(r.phase).toBe('COLLECT_WORDS');
+    expect((await settings(host,{custom_theme:'다른 테마'})).status).toBe(409);
+    for(let i=0;i<players.length;i++){const own=(await snapshot(players[i])).round!;expect(own.me!.role).toBeNull();expect(own.me!.word).toBeNull();expect((await game(players[i],'submit_word',{round_id:r.id,word:'교실단어'+i})).status).toBe(200);}
+    const after=(await snapshot(host)).round!;expect(after.theme).toBe('우리 학교');
+    const own=await Promise.all(players.map(snapshot));expect(own.filter(d=>d.round!.me!.role==='liar').every(d=>d.round!.me!.word===null)).toBe(true);
+  });
+  it('freezes random theme and alternate word across hint and pause, and keeps waiters private',async()=>{
+    const players=await room();const host=players[0];await settings(host,{theme:'random',game_mode:'confusion',difficulty:'hard'});await game(host,'start_round');
+    const before=await Promise.all(players.map(snapshot));const r=before[0].round!;
+    expect(r.theme).toBeTruthy();expect(before.every(d=>d.round!.theme===r.theme)).toBe(true);
+    for(const p of players)await game(p,'ack_role',{round_id:r.id});
+    await game(host,'pause',{round_id:r.id});
+    for(let i=0;i<players.length;i++){const after=(await snapshot(players[i])).round!;expect(after.phase).toBe('PAUSED_HOST');expect(after.theme).toBe(r.theme);expect(after.me!.word).toBe(before[i].round!.me!.word);}
+    const late=await join(host,'테마대기자');const dto=await snapshot(late);expect(dto.round!.me).toBeNull();expect(JSON.stringify(dto)).not.toMatch(/liar_word|easy_word|hard_word/);
+  });
+  it('has 15 words per theme and every reviewed easy/hard partner is distinct and in the same theme',async()=>{
+    const {rows}=await db.query<{category:string;n:number}>(`select category,count(*)::int n from app_private.builtin_words group by category`);expect(rows).toHaveLength(9);expect(rows.every(r=>r.n===15)).toBe(true);
+    const invalid=await db.query<{n:number}>(`select count(*)::int n from app_private.builtin_words w left join app_private.builtin_words e on e.category=w.category and e.word=w.easy_word left join app_private.builtin_words h on h.category=w.category and h.word=w.hard_word where e.word is null or h.word is null or w.word=w.easy_word or w.word=w.hard_word or w.easy_word=w.hard_word`);expect(invalid.rows[0].n).toBe(0);
   });
 });

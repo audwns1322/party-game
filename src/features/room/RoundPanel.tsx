@@ -37,9 +37,11 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   }, []);
   return <section className="card" aria-labelledby="round-title">
     <h2 id="round-title">{titles[round.phase]}</h2>
+    {round.theme && <p className="notice">공통 테마: <strong>{round.theme}</strong></p>}
+    {round.game_mode === 'confusion' && <p>혼선 라이어 · {round.difficulty === 'hard' ? '하드' : '이지'}</p>}
     {!round.me ? <p>게임이 진행 중이에요. 다음 판부터 함께할 수 있어요.</p> : <>
       {round.phase === 'COLLECT_WORDS' ? <>
-        <p>역할 공개 전, 모두 단어를 하나씩 제출해요. 라이어 후보는 선택에서 제외돼요.</p>
+        <p>공통 테마에 맞는 단어를 하나씩 제출해요. 라이어 후보는 선택에서 제외돼요.</p>
         <p role="status">제출 {round.submitted_count}/{round.participant_ids.length}명</p>
         {round.me.submitted ? <p>제출했어요. 다른 참가자를 기다려 주세요.</p> : <form onSubmit={event => { event.preventDefault(); void run('submit_word',{round_id:round.id,word}); }}>
           <label>나만의 단어<input value={word} maxLength={60} autoComplete="off" onChange={event => setWord(event.target.value)} /></label>
@@ -54,7 +56,8 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
           onKeyDown={event => { if ([' ','Enter'].includes(event.key)) { event.preventDefault(); setRevealed(true); } }}
           onKeyUp={() => setRevealed(false)} aria-label="누르는 동안 내 역할 보기">누르고 역할 보기</button>
         {revealed && <div className="secret-card"><strong>{round.me.role === 'liar' ? '당신은 라이어예요' : '당신은 시민이에요'}</strong>
-          <p>{round.me.role === 'citizen' ? `제시어: ${round.me.word}` : '힌트를 듣고 제시어를 추리하세요.'}</p></div>}
+          <p>{round.me.word ? `내 제시어: ${round.me.word}` : '힌트를 듣고 제시어를 추리하세요.'}</p>
+          {round.me.role === 'liar' && round.me.word && <p>시민들은 다른 제시어를 받았어요.</p>}</div>}
         {round.phase === 'REVEAL_ROLE' && <>
           <p role="status">역할 확인 {round.acknowledged_count}/{round.participant_ids.length}명</p>
           <button className="primary" disabled={busy || round.me.acknowledged} onClick={() => void run('ack_role',{round_id:round.id})}>

@@ -105,7 +105,7 @@ describe('authorization', () => {
     expect(ok.status).toBe(200);
     v = ((await ok.json()) as { version: number }).version;
     const dto = await (await snapshot(guest, host.room_id)).json();
-    expect(dto.room.settings).toEqual({ hint_rounds: 2, word_mode: 'custom', discussion_seconds: 0 });
+    expect(dto.room.settings).toEqual({ hint_rounds: 2, word_mode: 'custom', discussion_seconds: 0,theme:'random',custom_theme:'',game_mode:'classic',difficulty:'easy' });
     expect(dto.room.version).toBe(v);
     expect(sent).toContainEqual([host.room_id, v]);
   });

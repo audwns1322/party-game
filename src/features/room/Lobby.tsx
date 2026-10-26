@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { useEffect, useRef, useState } from 'react';
-import { messageFor, type Player, type Settings } from '../../lib/api';
+import { messageFor, THEMES, type Player, type Settings } from '../../lib/api';
 import { navigate } from '../../lib/router';
 import { clearSession, type StoredSession } from '../../lib/session';
 import { useRoom } from './useRoom';
@@ -96,6 +96,7 @@ export function Lobby({ session }: { session: StoredSession }) {
     try { await runGame(action,payload); } catch (e) { setError(messageFor(e)); } finally { setBusy(false); }
   };
   const isHost = me.is_host;
+  const needsTheme = room.settings.word_mode === 'custom' && !room.settings.custom_theme?.trim();
   const setting = (patch: Partial<Settings>) => act('update_settings', patch);
 
   return (
@@ -138,19 +139,48 @@ export function Lobby({ session }: { session: StoredSession }) {
       {error && <p role="alert" className="error">{error}</p>}
       {notice && <p role="status" className="notice">{notice}</p>}
       {round ? <RoundPanel key={`${round.id}:${round.phase}`} snapshot={snapshot} busy={busy} run={play} /> : isHost ? (
-        <button className="primary" disabled={busy || !online || players.length < MIN_PLAYERS || players.some(p => !p.connected)} onClick={() => void play('start_round')}>
-          {players.length < MIN_PLAYERS ? `${MIN_PLAYERS}명 이상 모이면 시작할 수 있어요` : '게임 시작 · 역할 배정'}
+        <button className="primary" disabled={busy || !online || needsTheme || players.length < MIN_PLAYERS || players.some(p => !p.connected)} onClick={() => void play('start_round')}>
+          {needsTheme ? '게임 설정에서 테마를 저장해 주세요' : players.length < MIN_PLAYERS ? `${MIN_PLAYERS}명 이상 모이면 시작할 수 있어요` : '게임 시작 · 역할 배정'}
         </button>
       ) : <p className="hint">방장이 게임을 시작하면 자동으로 넘어가요.</p>}
 
       <details className="card" open={isHost}>
         <summary>게임 설정 {isHost ? '' : '(방장만 변경)'}</summary>
         <label>제시어
-          <select disabled={!isHost || busy || Boolean(round)} value={room.settings.word_mode} onChange={(e) => setting({ word_mode: e.target.value as Settings['word_mode'] })}>
+          <select disabled={!isHost || busy || Boolean(round)} value={room.settings.word_mode} onChange={(e) => setting({ word_mode: e.target.value as Settings['word_mode'],game_mode:'classic' })}>
             <option value="builtin">기본 제시어</option>
             <option value="custom">직접 입력</option>
           </select>
         </label>
+        {room.settings.word_mode === 'builtin' ? <>
+          <label>테마
+            <select disabled={!isHost || busy || Boolean(round)} value={room.settings.theme ?? 'random'} onChange={e => void setting({theme:e.target.value as Settings['theme']})}>
+              <option value="random">랜덤 테마</option>
+              {THEMES.map(theme => <option key={theme}>{theme}</option>)}
+            </select>
+          </label>
+          {room.settings.theme === '크로스핏' && <p className="hint">크로스핏 동작 용어를 아는 참가자끼리 선택해 주세요.</p>}
+          <label>게임 방식
+            <select disabled={!isHost || busy || Boolean(round)} value={room.settings.game_mode ?? 'classic'} onChange={e => void setting({game_mode:e.target.value as Settings['game_mode']})}>
+              <option value="classic">기본 라이어</option><option value="confusion">혼선 라이어</option>
+            </select>
+          </label>
+          {room.settings.game_mode === 'confusion' && <label>라이어 난이도
+            <select disabled={!isHost || busy || Boolean(round)} value={room.settings.difficulty ?? 'easy'} onChange={e => void setting({difficulty:e.target.value as Settings['difficulty']})}>
+              <option value="easy">이지 · 비슷한 제시어</option><option value="hard">하드 · 차이가 큰 제시어</option>
+            </select>
+          </label>}
+          <p className="hint">{room.settings.game_mode === 'confusion' ? '라이어도 같은 테마의 다른 제시어를 받아요. 난이도는 라이어 기준이에요.' : '라이어는 테마만 알고, 제시어는 받지 않아요.'}</p>
+        </> : <>
+          <form key={`${room.id}:${room.settings.custom_theme ?? ''}`} onSubmit={event => {
+            event.preventDefault();
+            void setting({custom_theme:String(new FormData(event.currentTarget).get('theme') ?? '')});
+          }}>
+            <label>공통 테마<input name="theme" defaultValue={room.settings.custom_theme ?? ''} maxLength={60} placeholder="예: 음식, 우리 학교" disabled={!isHost || busy || Boolean(round)} required /></label>
+            {isHost && <button disabled={busy || Boolean(round)}>테마 저장</button>}
+          </form>
+          <p className="hint">기본 라이어로 진행해요. 각자 테마에 맞는 단어 하나만 제출해 주세요.</p>
+        </>}
         <label>힌트 바퀴 수
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.hint_rounds} onChange={(e) => setting({ hint_rounds: Number(e.target.value) as Settings['hint_rounds'] })}>
             {[1, 2, 3].map((n) => <option key={n} value={n}>{n}바퀴</option>)}

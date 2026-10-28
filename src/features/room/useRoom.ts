@@ -15,6 +15,12 @@ export function canReuseGameRequest(previous: GameRequest | null, current: Omit<
   return previous?.action === current.action && previous.expected_version === current.expected_version
     && previous.expected_phase === current.expected_phase && JSON.stringify(previous.payload) === JSON.stringify(current.payload);
 }
+export function canRetryVote(request: GameRequest, fresh: RoomSnapshot | undefined): fresh is RoomSnapshot {
+  const payload = request.payload as {round_id?:unknown;ballot_no?:unknown};
+  return request.action === 'submit_vote' && ['VOTE_1','VOTE_RUNOFF'].includes(request.expected_phase)
+    && fresh?.round?.id === payload.round_id && fresh?.round?.phase === request.expected_phase
+    && fresh?.round?.vote?.ballot_no === payload.ballot_no && fresh?.round?.me?.voted === false;
+}
 
 /** Server snapshot is the only source of truth. Realtime and heartbeat only trigger a re-fetch. */
 export function useRoom(session: Session) {
@@ -31,6 +37,7 @@ export function useRoom(session: Session) {
       version.current = next.room.version;
       setSnapshot(next);
       setOnline(true);
+      return next;
     } catch (error) {
       if (isFatal(error)) setFatal(error as ApiError); else setOnline(false);
     }
@@ -107,9 +114,20 @@ export function useRoom(session: Session) {
       action, payload, expected_version: version.current,
       expected_phase: (snapshot.round?.phase ?? 'LOBBY') as GamePhase,
     };
-    const body = canReuseGameRequest(previous,current) ? previous : { ...current, request_id:crypto.randomUUID() };
+    let body = canReuseGameRequest(previous,current) ? previous : { ...current, request_id:crypto.randomUUID() };
     pending.current = body;
-    try { await api.game(session,body); pending.current = null; }
+    try {
+      try { await api.game(session,body); }
+      catch (error) {
+        if (!(error instanceof ApiError && error.code === 'VERSION_CONFLICT' && action === 'submit_vote')) throw error;
+        const fresh = await refresh();
+        if (!canRetryVote(body,fresh)) throw error;
+        body = {...body,expected_version:fresh.room.version,request_id:crypto.randomUUID()};
+        pending.current = body;
+        await api.game(session,body);
+      }
+      pending.current = null;
+    }
     catch (error) {
       if (error instanceof ApiError && error.status > 0 && error.status < 500) pending.current = null;
       throw error;

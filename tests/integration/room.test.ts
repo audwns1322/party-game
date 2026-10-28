@@ -50,7 +50,7 @@ describe('database permissions', () => {
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(9);
+    expect(rows[0].n).toBe(10);
   });
 });
 

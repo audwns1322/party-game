@@ -8,14 +8,19 @@ export type Settings = {
   game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard';
 };
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
-export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'VOTE_1';
+export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'VOTE_1' | 'VOTE_RUNOFF' | 'REVEAL_VOTE' | 'FINAL_RESULT';
 export type RoundSnapshot = {
   id: string; phase: Exclude<GamePhase,'LOBBY'>; version: number; participant_ids: string[];
   submitted_count: number; acknowledged_count: number;
   theme?: string; game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard';
   hint_index: number; hint_round: number; hint_rounds: number; current_player_id: string | null;
   deadline_at: string | null; remaining_ms: number | null; paused_phase: 'HINT' | 'DISCUSS' | null;
-  me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null } | null;
+  me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null; voted?: boolean } | null;
+  vote?: {
+    ballot_no: number; candidate_ids: string[]; submitted_count: number;
+    tallies: {ballot_no:number; counts:{player_id:string; votes:number}[]}[];
+    selected_player_id: string | null; outcome: 'DRAW' | null;
+  };
 };
 export type RoomSnapshot = {
   server_now?: string;
@@ -83,6 +88,8 @@ const MESSAGES: Record<string, string> = {
   INVALID_SETTINGS: '테마와 게임 설정을 확인해 주세요. 직접 입력은 테마가 필요하며 기본 라이어로 진행해요.',
   ALREADY_SUBMITTED: '이미 단어를 제출했어요.',
   ALREADY_ACKNOWLEDGED: '이미 역할을 확인했어요.',
+  ALREADY_VOTED: '이미 투표했어요. 제출한 표는 바꿀 수 없어요.',
+  INVALID_TARGET: '본인을 제외한 이번 투표의 후보를 선택해 주세요.',
   ROOM_CLOSED: '종료된 방이에요.',
   FORBIDDEN: '이 방의 참가자가 아니에요. 나갔거나 내보내졌을 수 있어요.',
   RATE_LIMITED: '요청이 너무 많아요. 몇 분 뒤에 다시 시도해 주세요.',

@@ -7,6 +7,9 @@ p{color:var(--muted);line-height:1.6}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin:16px 0}
 label{display:block;margin:0 0 14px;color:var(--muted);font-size:.95rem}
 input,select{display:block;width:100%;min-height:48px;margin-top:6px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#16152a;color:var(--fg);font:inherit;font-size:16px}
+.vote-choices{border:1px solid var(--line);border-radius:12px;padding:12px;margin:16px 0}
+.vote-choices label{display:flex;align-items:center;gap:12px;min-height:48px;padding:8px;margin:4px 0;cursor:pointer;color:var(--fg);overflow-wrap:anywhere}
+.vote-choices input[type=radio]{width:22px;min-height:22px;margin:0;flex-shrink:0;accent-color:var(--accent)}
 button{min-height:48px;width:100%;padding:12px;margin-top:10px;border-radius:12px;border:1px solid #77708f;background:#3c3656;color:#ded9ee;font:inherit;cursor:pointer}
 button:disabled{opacity:.55;cursor:not-allowed}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}

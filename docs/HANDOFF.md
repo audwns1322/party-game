@@ -1,7 +1,7 @@
 # HANDOFF (2026-10-28)
 
 ## 공개/로컬 상태
-- main의 M5 기준은 PR #8 merge `264bc3c`. 현재 작업 `codex/m6-resilience`: M6 끊김 정지/복귀·방장 위임·예약 정리까지 구현·원격·데스크톱 검증 완료. main 통합과 공개 배포는 이 브랜치의 PR에서 관리한다. 최신 병합/배포 상태는 GitHub/Vercel 확인.
+- main의 M5 기준은 PR #8 merge `264bc3c`. 현재 작업 `codex/m6-resilience`, PR #9 `https://github.com/audwns1322/party-game/pull/9`: M6 끊김 정지/복귀·방장 위임·예약 정리까지 구현·원격·데스크톱 검증 완료. main 통합과 공개 배포는 이 PR에서 관리한다. 최신 병합/배포 상태는 GitHub/Vercel 확인.
 - 개발 DB는 M6 `20261028091227_m6_resilience`까지 적용, game-command v6·player-recover v4 배포 완료. 공개 사이트 `https://party-game-psi-pink.vercel.app`.
 - 사용자 확정: 두 라이어를 모두 잡아야 시민 승리. 오답 확정 라이어 탈락 후 생존자 추가 토론/투표. 지목 라이어 정답이면 라이어 팀 전체 승리, 시민 오지목도 라이어 팀 승리.
 - 단위 26 + SQL/핸들러 112 = 138개, 실제 M6 원격 14개 통과. build·lint·7개 Edge 타입 통과. 데스크톱 실제 끊김→유예→추가 기다림→자동 재개 확인. 상세 `M6_VALIDATION.md`, 이전 M5 검증은 `M5_VALIDATION.md`.

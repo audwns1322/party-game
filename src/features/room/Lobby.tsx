@@ -68,7 +68,7 @@ export function Lobby({ session }: { session: StoredSession }) {
     const closed = fatal.code === 'ROOM_CLOSED';
     return (
       <main>
-        <h1>{closed ? '종료된 방이에요' : '대기실에서 나왔어요'}</h1>
+        <h1>{closed ? '종료된 방이에요' : '이 방에 접속할 수 없어요'}</h1>
         <p>{messageFor(fatal)}</p>
         {!closed && <button className="primary" onClick={() => navigate(`/room/${session.code}`)}>이 방에 다시 참가하기</button>}
         <button onClick={() => navigate('/')}>처음으로</button>

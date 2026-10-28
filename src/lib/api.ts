@@ -106,7 +106,7 @@ const MESSAGES: Record<string, string> = {
   CITIZEN_ONLY: '시민만 이의 제기와 판정 투표에 참여할 수 있어요.',
   ALREADY_APPEAL_VOTED: '이미 판정 투표를 제출했어요.',
   ROOM_CLOSED: '종료된 방이에요.',
-  FORBIDDEN: '이 방의 참가자가 아니에요. 나갔거나 내보내졌을 수 있어요.',
+  FORBIDDEN: '방이 종료됐거나 이 기기의 참가 정보가 더 이상 유효하지 않아요. 다른 기기에서 이어 했는지도 확인해 주세요.',
   RATE_LIMITED: '요청이 너무 많아요. 몇 분 뒤에 다시 시도해 주세요.',
   NETWORK: '서버에 연결할 수 없어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.',
   NOT_CONFIGURED: '서버 설정(.env.local)이 없어요.',

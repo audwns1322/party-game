@@ -16,6 +16,7 @@ const KNOWN: Record<string, number> = {
   NOT_ROUND_PLAYER: 403, INVALID_WORD: 400, NOT_YOUR_TURN: 403, DISCUSSION_NOT_OVER: 409, DISCUSSION_OVER: 409,
   INVALID_TARGET: 400, ALREADY_VOTED: 409,
   INVALID_GUESS: 400, NOT_GUESSER: 403, CITIZEN_ONLY: 403, ALREADY_APPEAL_VOTED: 409,
+  ROUND_PAUSED: 409, RECONNECT_GRACE: 409,
 };
 export class ApiError extends Error {
   readonly code: string;
@@ -158,14 +159,18 @@ export function joinRoomHandler(rpc: Rpc, broadcast: Broadcast) {
   });
 }
 // Recovery changes nothing other players can see, so it sends no version hint.
-export function recoverHandler(rpc: Rpc) {
+export function recoverHandler(rpc: Rpc, broadcast?: Broadcast) {
   return guard(async (request) => {
     const input = await body(request);
     const code = normalizeCode(input.room_code);
     const recoveryHash = await hashToken(normalizeRecoveryCode(input.recovery_code));
     await limit(rpc, await ipBucket(request, 'recover'), LIMITS.recoverPerIp);
     await limit(rpc, `recover:room:${code}`, LIMITS.recoverPerRoom);
-    return issue(async (p_credential_hash, p_new_recovery_hash) => await rpc('player_recover', { p_code: code, p_recovery_hash: recoveryHash, p_credential_hash, p_new_recovery_hash }) as Issued, null);
+    return issue(async (p_credential_hash, p_new_recovery_hash) => {
+      const result = await rpc('player_recover', { p_code: code, p_recovery_hash: recoveryHash, p_credential_hash, p_new_recovery_hash }) as Issued & {_transition_applied?:boolean};
+      if (result._transition_applied && broadcast) await notify(broadcast,result.room_id,result.version);
+      return result;
+    }, null);
   });
 }
 export function snapshotRoomHandler(rpc: Rpc, broadcast?: Broadcast) {

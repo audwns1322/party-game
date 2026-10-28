@@ -8,8 +8,11 @@ export function parseVersionEvent(value: unknown, roomId: string): { room_id: st
 // Broadcast is an untrusted invalidation hint. It never changes game state.
 // The caller must re-fetch an authenticated server snapshot and handle reconnects.
 export function subscribeToRoomVersion(client: SupabaseClient, roomId: string, invalidate: () => void) {
-  const channel = client.channel(`room:${roomId}`).on('broadcast', { event: 'version' }, ({ payload }) => {
+  // Anonymous Presence carries no identity or secrets; even forged leaves cannot pause the server.
+  const channel = client.channel(`room:${roomId}`,{config:{presence:{key:crypto.randomUUID()}}}).on('broadcast', { event: 'version' }, ({ payload }) => {
     if (parseVersionEvent(payload, roomId)) invalidate();
-  }).subscribe((status) => { if (status === 'SUBSCRIBED') invalidate(); });
+  }).on('presence',{event:'sync'},invalidate).subscribe((status) => {
+    if (status === 'SUBSCRIBED') { void channel.track({}); invalidate(); }
+  });
   return () => client.removeChannel(channel);
 }

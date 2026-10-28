@@ -68,7 +68,7 @@ export function Lobby({ session }: { session: StoredSession }) {
     const closed = fatal.code === 'ROOM_CLOSED';
     return (
       <main>
-        <h1>{closed ? '종료된 방이에요' : '대기실에서 나왔어요'}</h1>
+        <h1>{closed ? '종료된 방이에요' : '이 방에 접속할 수 없어요'}</h1>
         <p>{messageFor(fatal)}</p>
         {!closed && <button className="primary" onClick={() => navigate(`/room/${session.code}`)}>이 방에 다시 참가하기</button>}
         <button onClick={() => navigate('/')}>처음으로</button>
@@ -215,6 +215,7 @@ export function Lobby({ session }: { session: StoredSession }) {
         </details>
       )}
 
+      <p className="notice">사용자 조작 없이 2시간이 지나면 방이 만료돼요. 종료·만료된 방의 참가 정보와 전적은 정리 작업으로 삭제돼요. 서버 백업은 별도 보존 정책을 따라요.</p>
       <button type="button" disabled={busy || Boolean(round?.me)}
         onClick={() => (armed === 'leave' ? void act('leave').then((ok) => { if (ok) { clearSession(session.code); navigate('/'); } }) : arm('leave'))}>
         {armed === 'leave' ? '한 번 더 누르면 나가요' : '방 나가기'}

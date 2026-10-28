@@ -8,7 +8,7 @@ export type Settings = {
   game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard'; liar_count?: 1 | 2;
 };
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
-export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'VOTE_1' | 'VOTE_RUNOFF' | 'REVEAL_VOTE' | 'REVEAL_LIAR' | 'GUESS' | 'APPEAL_WINDOW' | 'APPEAL_VOTE' | 'FINAL_RESULT';
+export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'PAUSED_DISCONNECT' | 'VOTE_1' | 'VOTE_RUNOFF' | 'REVEAL_VOTE' | 'REVEAL_LIAR' | 'GUESS' | 'APPEAL_WINDOW' | 'APPEAL_VOTE' | 'FINAL_RESULT';
 export type RoundSnapshot = {
   id: string; phase: Exclude<GamePhase,'LOBBY'>; version: number; participant_ids: string[];
   submitted_count: number; acknowledged_count: number;
@@ -18,6 +18,7 @@ export type RoundSnapshot = {
   deadline_at: string | null; remaining_ms: number | null; paused_phase: 'HINT' | 'DISCUSS' | null;
   me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null; voted?: boolean; eliminated?: boolean } | null;
   eliminated_ids?: string[];
+  disconnect?: {original_phase:GamePhase; remaining_ms:number|null; grace_until:string; missing_ids:string[]} | null;
   vote?: {
     ballot_no: number; cycle_no?: number; candidate_ids: string[]; submitted_count: number;
     tallies: {ballot_no:number; counts:{player_id:string; votes:number}[]}[];
@@ -91,6 +92,8 @@ const MESSAGES: Record<string, string> = {
   PLAYER_COUNT: '게임은 3~15명일 때 시작할 수 있어요.',
   PLAYERS_OFFLINE: '자리 비움인 참가자가 있어요. 모두 돌아온 후 시작해 주세요.',
   ROUND_ACTIVE: '현재 판을 먼저 취소해 주세요.',
+  ROUND_PAUSED: '참가자의 재접속을 기다리며 잠시 멈췄어요.',
+  RECONNECT_GRACE: '30초 복귀 유예가 끝난 뒤 기다림 또는 판 취소를 선택할 수 있어요.',
   NOT_ROUND_PLAYER: '이번 판은 관전할 수 없어요. 다음 판을 기다려 주세요.',
   INVALID_WORD: '공백을 제외한 2~30자의 단어를 입력해 주세요.',
   INVALID_SETTINGS: '테마와 게임 설정을 확인해 주세요. 직접 입력은 테마가 필요하며 기본 라이어로 진행해요.',
@@ -103,7 +106,7 @@ const MESSAGES: Record<string, string> = {
   CITIZEN_ONLY: '시민만 이의 제기와 판정 투표에 참여할 수 있어요.',
   ALREADY_APPEAL_VOTED: '이미 판정 투표를 제출했어요.',
   ROOM_CLOSED: '종료된 방이에요.',
-  FORBIDDEN: '이 방의 참가자가 아니에요. 나갔거나 내보내졌을 수 있어요.',
+  FORBIDDEN: '방이 종료됐거나 이 기기의 참가 정보가 더 이상 유효하지 않아요. 다른 기기에서 이어 했는지도 확인해 주세요.',
   RATE_LIMITED: '요청이 너무 많아요. 몇 분 뒤에 다시 시도해 주세요.',
   NETWORK: '서버에 연결할 수 없어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.',
   NOT_CONFIGURED: '서버 설정(.env.local)이 없어요.',

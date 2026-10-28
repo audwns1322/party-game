@@ -36,7 +36,7 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
     <main>
       <span className="badge">PARTY GAME · LIAR</span>
       <h1>함께 모여,<br />시작하는 즐거움</h1>
-      <p>계정 없이 함께하는 3~12인 라이어 게임</p>
+      <p>계정 없이 함께하는 3~15인 라이어 게임</p>
       {!apiConfigured && <p role="alert" className="error">서버 설정(.env.local)이 없어요.</p>}
 
       {rooms.length > 0 && (

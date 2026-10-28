@@ -15,6 +15,6 @@ it('retries a concurrent vote only in the same round/ballot while still unsubmit
   const state=(patch:object={})=>({round:{id:'round',phase:'VOTE_1',me:{voted:false},vote:{ballot_no:1},...patch}} as unknown as RoomSnapshot);
   expect(canRetryVote(vote,state())).toBe(true);
   expect(canRetryVote(vote,undefined)).toBe(false);
-  for(const patch of [{id:'other'},{phase:'VOTE_RUNOFF'},{vote:{ballot_no:2}},{me:{voted:true}},{me:null}])expect(canRetryVote(vote,state(patch))).toBe(false);
+  for(const patch of [{id:'other'},{phase:'VOTE_RUNOFF'},{vote:{ballot_no:2}},{vote:{ballot_no:1,cycle_no:2}},{me:{voted:true}},{me:null}])expect(canRetryVote(vote,state(patch))).toBe(false);
   expect(canRetryVote(pending,state())).toBe(false);
 });

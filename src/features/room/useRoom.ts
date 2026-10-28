@@ -16,10 +16,10 @@ export function canReuseGameRequest(previous: GameRequest | null, current: Omit<
     && previous.expected_phase === current.expected_phase && JSON.stringify(previous.payload) === JSON.stringify(current.payload);
 }
 export function canRetryVote(request: GameRequest, fresh: RoomSnapshot | undefined): fresh is RoomSnapshot {
-  const payload = request.payload as {round_id?:unknown;ballot_no?:unknown};
+  const payload = request.payload as {round_id?:unknown;ballot_no?:unknown;cycle_no?:unknown};
   return request.action === 'submit_vote' && ['VOTE_1','VOTE_RUNOFF'].includes(request.expected_phase)
     && fresh?.round?.id === payload.round_id && fresh?.round?.phase === request.expected_phase
-    && fresh?.round?.vote?.ballot_no === payload.ballot_no && fresh?.round?.me?.voted === false;
+    && fresh?.round?.vote?.ballot_no === payload.ballot_no && (fresh?.round?.vote?.cycle_no ?? 1) === (payload.cycle_no ?? 1) && fresh?.round?.me?.voted === false;
 }
 
 /** Server snapshot is the only source of truth. Realtime and heartbeat only trigger a re-fetch. */
@@ -79,7 +79,7 @@ export function useRoom(session: Session) {
   }, [session, refresh]);
 
   useEffect(() => {
-    if (fatal || snapshot?.round?.phase !== 'DISCUSS' || !snapshot.round.deadline_at) return;
+    if (fatal || !['DISCUSS','REVEAL_VOTE','REVEAL_LIAR','APPEAL_WINDOW','APPEAL_VOTE'].includes(snapshot?.round?.phase ?? '') || !snapshot?.round?.deadline_at) return;
     let active = false;
     const timer = setInterval(async () => {
       if (active || document.visibilityState !== 'visible') return;

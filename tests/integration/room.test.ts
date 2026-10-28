@@ -50,7 +50,7 @@ describe('database permissions', () => {
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(10);
+    expect(rows[0].n).toBe(15);
   });
 });
 
@@ -68,10 +68,10 @@ describe('create / join / capacity', () => {
     expect(dto.me).toEqual({ player_id: host.player_id, is_host: true });
     expect(dto.players).toHaveLength(1);
   });
-  it('rejects the 13th player, duplicate nicknames (case-insensitive) and unknown codes', async () => {
+  it('rejects the 16th player, duplicate nicknames (case-insensitive) and unknown codes', async () => {
     const host = await create('Host');
-    for (let i = 2; i <= 12; i++) expect((await join(host.code, `참가자${i}`)).status).toBe(200);
-    expect(await (await join(host.code, '열세번째')).json()).toEqual({ error: 'ROOM_FULL' });
+    for (let i = 2; i <= 15; i++) expect((await join(host.code, `참가자${i}`)).status).toBe(200);
+    expect(await (await join(host.code, '열여섯번째')).json()).toEqual({ error: 'ROOM_FULL' });
     const other = await create('Alpha');
     expect(await (await join(other.code, 'alpha')).json()).toEqual({ error: 'NICKNAME_TAKEN' });
     expect(await (await join(other.code, String.fromCodePoint(0xff21, 0xff4c, 0xff50, 0xff48, 0xff41))).json()).toEqual({ error: 'NICKNAME_TAKEN' });
@@ -105,7 +105,7 @@ describe('authorization', () => {
     expect(ok.status).toBe(200);
     v = ((await ok.json()) as { version: number }).version;
     const dto = await (await snapshot(guest, host.room_id)).json();
-    expect(dto.room.settings).toEqual({ hint_rounds: 2, word_mode: 'custom', discussion_seconds: 0,theme:'random',custom_theme:'',game_mode:'classic',difficulty:'easy' });
+    expect(dto.room.settings).toEqual({ hint_rounds: 2, word_mode: 'custom', discussion_seconds: 0,theme:'random',custom_theme:'',game_mode:'classic',difficulty:'easy',liar_count:1 });
     expect(dto.room.version).toBe(v);
     expect(sent).toContainEqual([host.room_id, v]);
   });

@@ -100,13 +100,12 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
             <ul>{tally.counts.map(count => <li key={count.player_id}>{playerName(count.player_id)} · {count.votes}표</li>)}</ul>
           </div>)}
           {round.vote.selected_player_id && <p role="status">최다 득표: {playerName(round.vote.selected_player_id)}님. 역할 공개와 정답 도전은 M5에서 이어집니다.</p>}
-          {round.vote.outcome === 'DRAW' && <><p role="status">무승부로 판이 끝났어요. 승점은 반영하지 않아요.</p>
-            {snapshot.me.is_host && <button className="primary" disabled={busy} onClick={() => void run('return_lobby',{round_id:round.id})}>대기실로 돌아가기</button>}
-          </>}
+          {round.vote.outcome === 'DRAW' && <p role="status">무승부로 판이 끝났어요. 승점은 반영하지 않아요.</p>}
         </>}
         {snapshot.me.is_host && ['HINT','DISCUSS','PAUSED_HOST'].includes(round.phase) && <button disabled={busy} onClick={() => void run(round.phase === 'PAUSED_HOST' ? 'resume' : 'pause',{round_id:round.id})}>{round.phase === 'PAUSED_HOST' ? '이어서 진행' : '잠시 멈추기'}</button>}
       </>}
     </>}
+    {snapshot.me.is_host && round.phase === 'FINAL_RESULT' && round.vote?.outcome === 'DRAW' && <button className="primary" disabled={busy} onClick={() => void run('return_lobby',{round_id:round.id})}>대기실로 돌아가기</button>}
     {snapshot.me.is_host && round.phase !== 'FINAL_RESULT' && <button className="danger" disabled={busy} onClick={() => {
       if (confirmCancel) void run('cancel_round'); else setConfirmCancel(true);
     }}>{confirmCancel ? '한 번 더 누르면 점수 없이 취소해요' : '현재 판 취소'}</button>}

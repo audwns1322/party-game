@@ -343,3 +343,14 @@ describe('M4 private voting',()=>{
     const foreign=await room(1);await expect(db.query('insert into app_private.votes(round_id,ballot_no,voter_id,target_id) values($1,1,$2,$3)',[r.id,p[1].player_id,foreign[0].player_id])).rejects.toThrow(/foreign key/);
   });
 });
+
+describe('M4 result host handoff',()=>{
+  it('lets a waiting player who becomes host return a draw result to the lobby',async()=>{
+    const p=await voting();const late=await join(p[0],'새방장대기');
+    for(let ballot=1;ballot<=2;ballot++)for(let i=0;i<3;i++)expect((await cast(p[i],p[(i+1)%3].player_id)).status).toBe(200);
+    const result=(await snapshot(p[0])).round!;expect(result.phase).toBe('FINAL_RESULT');
+    for(const player of p){const d=await snapshot(player);expect((await api.room(request({room_id:player.room_id,action:'leave',payload:{},expected_version:d.room.version,request_id:randomUUID()},player.token))).status).toBe(200);}
+    const inherited=await snapshot(late);expect(inherited.me.is_host).toBe(true);expect(inherited.round!.me).toBeNull();
+    expect((await game(late,'return_lobby',{round_id:result.id})).status).toBe(200);expect((await snapshot(late)).round).toBeNull();
+  });
+});

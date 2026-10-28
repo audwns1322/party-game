@@ -3,7 +3,7 @@
 ## 현재 상태
 - main 기반은 단어 확장 PR #6(`a5dfb6e`), 9개 테마×30개=270단어. 공개 주소 https://party-game-psi-pink.vercel.app.
 - 후속 `codex/m4-voting`: 비밀 투표·자동 집계·공동 1위 재투표 1회·재동률 무승부/승점 없음·대기실 복귀 구현. 비동률은 REVEAL_VOTE에서 M5 연결 대기.
-- 단위 22 + SQL/실제 핸들러 72 = 94개, 타입 포함 build·lint·모든 Edge 타입 통과. 실제 개발 Supabase 원격 11개(3/6/12명) 통과. 상세 `M4_VALIDATION.md`.
+- 단위 22 + SQL/실제 핸들러 73 = 95개, 타입 포함 build·lint·모든 Edge 타입 통과. 실제 개발 Supabase 원격 11개(3/6/12명) 통과. 상세 `M4_VALIDATION.md`.
 - 개발 migration `20261028055003_m4_voting`, game-command v4 적용. 개인 표는 private votes 테이블만 저장하며 공개 DTO/Broadcast에는 표 연결을 포함하지 않는다. 진행 중 득표도 숨김.
 
 ## 다음 작업과 보류

@@ -6,6 +6,8 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   const [revealed,setRevealed] = useState(false);
   const [confirmCancel,setConfirmCancel] = useState(false);
   const [confirmSkip,setConfirmSkip] = useState(false);
+  const [voteTarget,setVoteTarget] = useState('');
+  const [confirmVote,setConfirmVote] = useState('');
   const round = snapshot.round!;
   const [clock,setClock] = useState({ serverNow:snapshot.server_now, elapsed:0 });
   useEffect(() => {
@@ -18,7 +20,8 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   const remaining = round.deadline_at && snapshot.server_now
     ? Math.max(0,Math.ceil((Date.parse(round.deadline_at)-Date.parse(snapshot.server_now)-elapsed)/1000)) : null;
   const currentName = snapshot.players.find(p => p.id === round.current_player_id)?.nickname;
-  const titles = { COLLECT_WORDS:'제시어 후보 제출', REVEAL_ROLE:'내 역할 확인', HINT:'차례대로 힌트', DISCUSS:'자유 토론', PAUSED_HOST:'잠시 멈췄어요', VOTE_1:'투표 준비' };
+  const titles = { COLLECT_WORDS:'제시어 후보 제출', REVEAL_ROLE:'내 역할 확인', HINT:'차례대로 힌트', DISCUSS:'자유 토론', PAUSED_HOST:'잠시 멈췄어요', VOTE_1:'1차 비밀 투표', VOTE_RUNOFF:'동률 재투표', REVEAL_VOTE:'투표 집계', FINAL_RESULT:'무승부' };
+  const playerName = (id:string) => snapshot.players.find(p => p.id === id)?.nickname ?? '참가자';
   useEffect(() => {
     if (!confirmCancel) return;
     const timer = setTimeout(() => setConfirmCancel(false),4000);
@@ -76,11 +79,35 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
           }}>{remaining === null ? '토론 마치고 투표로' : confirmSkip ? '한 번 더 누르면 토론을 끝내요' : '남은 시간 건너뛰기'}</button>}
         </>}
         {round.phase === 'PAUSED_HOST' && <p role="status">방장이 진행을 멈췄어요.{round.remaining_ms !== null ? ' 남은 토론 시간 '+Math.ceil(round.remaining_ms/1000)+'초' : ''}</p>}
-        {round.phase === 'VOTE_1' && <p role="status">토론을 마쳤어요. 투표 기능은 M4에서 연결됩니다.</p>}
+        {['VOTE_1','VOTE_RUNOFF'].includes(round.phase) && round.vote && <>
+          <p>{round.phase === 'VOTE_RUNOFF' ? '공동 1위 후보에게 한 번 더 투표해요. 다시 동률이면 무승부예요.' : '라이어라고 생각하는 참가자 한 명을 선택하세요.'}</p>
+          <p role="status">투표 제출 {round.vote.submitted_count}/{round.participant_ids.length}명 · 누가 누구에게 투표했는지는 공개하지 않아요.</p>
+          {round.me.voted ? <p>투표를 제출했어요. 나머지 참가자를 기다려 주세요.</p> : <>
+            <fieldset className="vote-choices" disabled={busy}><legend>본인을 제외한 투표 대상</legend>
+              {round.vote.candidate_ids.filter(id => id !== snapshot.me.player_id).map(id => <label key={id}>
+                <input type="radio" name="vote-target" value={id} checked={voteTarget === id} onChange={() => {setVoteTarget(id);setConfirmVote('');}} />{playerName(id)}
+              </label>)}
+            </fieldset>
+            {confirmVote ? <div>
+              <p>{playerName(confirmVote)}님에게 투표할까요? 제출 후에는 바꿀 수 없어요.</p>
+              <button className="primary" disabled={busy} onClick={() => void run('submit_vote',{round_id:round.id,ballot_no:round.vote!.ballot_no,target_id:confirmVote})}>투표 확정</button>
+              <button disabled={busy} onClick={() => setConfirmVote('')}>다시 선택</button>
+            </div> : <button className="primary" disabled={busy || !voteTarget} onClick={() => setConfirmVote(voteTarget)}>선택 확인</button>}
+          </>}
+        </>}
+        {['VOTE_RUNOFF','REVEAL_VOTE','FINAL_RESULT'].includes(round.phase) && round.vote && <>
+          {round.vote.tallies.map(tally => <div key={tally.ballot_no}><h3>{tally.ballot_no === 1 ? '1차 투표 집계' : '재투표 집계'}</h3>
+            <ul>{tally.counts.map(count => <li key={count.player_id}>{playerName(count.player_id)} · {count.votes}표</li>)}</ul>
+          </div>)}
+          {round.vote.selected_player_id && <p role="status">최다 득표: {playerName(round.vote.selected_player_id)}님. 역할 공개와 정답 도전은 M5에서 이어집니다.</p>}
+          {round.vote.outcome === 'DRAW' && <><p role="status">무승부로 판이 끝났어요. 승점은 반영하지 않아요.</p>
+            {snapshot.me.is_host && <button className="primary" disabled={busy} onClick={() => void run('return_lobby',{round_id:round.id})}>대기실로 돌아가기</button>}
+          </>}
+        </>}
         {snapshot.me.is_host && ['HINT','DISCUSS','PAUSED_HOST'].includes(round.phase) && <button disabled={busy} onClick={() => void run(round.phase === 'PAUSED_HOST' ? 'resume' : 'pause',{round_id:round.id})}>{round.phase === 'PAUSED_HOST' ? '이어서 진행' : '잠시 멈추기'}</button>}
       </>}
     </>}
-    {snapshot.me.is_host && <button className="danger" disabled={busy} onClick={() => {
+    {snapshot.me.is_host && round.phase !== 'FINAL_RESULT' && <button className="danger" disabled={busy} onClick={() => {
       if (confirmCancel) void run('cancel_round'); else setConfirmCancel(true);
     }}>{confirmCancel ? '한 번 더 누르면 점수 없이 취소해요' : '현재 판 취소'}</button>}
   </section>;

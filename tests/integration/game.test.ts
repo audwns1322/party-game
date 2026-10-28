@@ -49,7 +49,7 @@ describe('M2 assignment and secrecy',()=>{
     const [host]=await room(); await game(host,'start_round'); const dto=await snapshot(host);
     await db.exec(`begin; update app_private.round_players set role='citizen' where round_id='${dto.round!.id}'; update app_private.round_players set role='liar' where round_id='${dto.round!.id}' and player_id='${host.player_id}'; commit;`);
     const d=await snapshot(host); expect(d.round!.me!.role).toBe('liar');expect(d.round!.me!.word).toBeNull();
-    expect(JSON.stringify(d)).not.toMatch(/credential|recovery|candidate|"roles"/);
+    expect(JSON.stringify(d)).not.toMatch(/credential|recovery|word_candidates|"roles"|voter_id|target_id/);
     for(const p of d.players) expect(Object.keys(p).sort()).toEqual(['connected','id','join_order','nickname','status','wins']);
   });
   it('rejects 1/2 players, non-host start, disconnected players and stale phase/version',async()=>{
@@ -115,6 +115,7 @@ describe('M2 custom words and transitions',()=>{
     try {
       await restored.exec('create role anon; create role authenticated; create role service_role;');
       for(const file of (await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort())await restored.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
+      await restored.exec(await readFile('supabase/rollback/m4.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/themes_word_modes.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m3.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m2.sql','utf8'));
@@ -246,7 +247,7 @@ describe('themes and confusion liar',()=>{
       const r=(await snapshot(host)).round!;
       const {rows}=await db.query<{word:string;liar_word:string|null;easy_word:string;hard_word:string}>(`select s.word,s.liar_word,w.easy_word,w.hard_word from app_private.round_secrets s join app_private.builtin_words w on w.category=s.category and w.word=s.word where s.round_id=$1`,[r.id]);
       expect(rows[0].liar_word).toBe(mode==='classic'?null:mode==='easy'?rows[0].easy_word:rows[0].hard_word);
-      for(const p of players){const own=(await snapshot(p)).round!;expect(own.theme).toBe(theme);expect(own.game_mode).toBe(mode==='classic'?'classic':'confusion');expect(own.me!.word).toBe(own.me!.role==='liar'?rows[0].liar_word:rows[0].word);expect(Object.keys(own.me!).sort()).toEqual(['acknowledged','role','submitted','word']);}
+      for(const p of players){const own=(await snapshot(p)).round!;expect(own.theme).toBe(theme);expect(own.game_mode).toBe(mode==='classic'?'classic':'confusion');expect(own.me!.word).toBe(own.me!.role==='liar'?rows[0].liar_word:rows[0].word);expect(Object.keys(own.me!).sort()).toEqual(['acknowledged','role','submitted','voted','word']);}
       expect((await game(host,'cancel_round')).status).toBe(200);
     }
   });
@@ -276,5 +277,69 @@ describe('themes and confusion liar',()=>{
     const {rows}=await db.query<{category:string;n:number}>(`select category,count(*)::int n from app_private.builtin_words group by category`);expect(rows).toHaveLength(9);expect(rows.every(r=>r.n===30)).toBe(true);
     const unique=await db.query<{n:number}>(`select count(distinct word)::int n from app_private.builtin_words`);expect(unique.rows[0].n).toBe(270);
     const invalid=await db.query<{n:number}>(`select count(*)::int n from app_private.builtin_words w left join app_private.builtin_words e on e.category=w.category and e.word=w.easy_word left join app_private.builtin_words h on h.category=w.category and h.word=w.hard_word where e.word is null or h.word is null or w.word=w.easy_word or w.word=w.hard_word or w.easy_word=w.hard_word`);expect(invalid.rows[0].n).toBe(0);
+  });
+});
+async function voting(count=3){const players=await hints(1,0,count);await finishAll(players);const r=(await snapshot(players[0])).round!;expect((await game(players[0],'start_vote',{round_id:r.id})).status).toBe(200);return players;}
+async function cast(s:Issued,target:string,overrides:object={}){const r=(await snapshot(s)).round!;return game(s,'submit_vote',{round_id:r.id,ballot_no:r.vote!.ballot_no,target_id:target},overrides);}
+describe('M4 private voting',()=>{
+  it.each([3,6,12])('tallies %i voters once, hides partial totals and chooses one player',async count=>{
+    const players=await voting(count);const host=players[0];
+    for(let i=0;i<count;i++){
+      const before=await snapshot(players[i]);expect(before.round!.vote!.tallies).toEqual([]);expect(JSON.stringify(before)).not.toMatch(/voter_id|target_id/);
+      expect((await cast(players[i],players[i===0?1:0].player_id)).status).toBe(200);
+      if(i<count-1){const dto=await snapshot(host);expect(dto.round!.phase).toBe('VOTE_1');expect(dto.round!.vote!.submitted_count).toBe(i+1);expect(dto.round!.vote!.tallies).toEqual([]);}
+    }
+    const dto=await snapshot(host);expect(dto.round!.phase).toBe('REVEAL_VOTE');expect(dto.round!.vote!.selected_player_id).toBe(host.player_id);expect(dto.round!.vote!.tallies).toHaveLength(1);
+    expect(dto.round!.vote!.tallies[0].counts.reduce((sum,c)=>sum+c.votes,0)).toBe(count);expect(dto.players.every(p=>p.wins===0)).toBe(true);
+    expect((await cast(host,players[1].player_id)).status).toBe(409);
+    await game(host,'cancel_round');expect((await snapshot(host)).round).toBeNull();
+  });
+  it.each([3,6,12])('ends a repeated %i-way tie as a draw without points and returns to lobby',async count=>{
+    const players=await voting(count);const host=players[0];
+    for(let i=0;i<count;i++)expect((await cast(players[i],players[(i+1)%count].player_id)).status).toBe(200);
+    const runoff=(await snapshot(host)).round!;expect(runoff.phase).toBe('VOTE_RUNOFF');expect(runoff.vote!.candidate_ids).toHaveLength(count);expect(runoff.vote!.tallies).toHaveLength(1);
+    for(let i=0;i<count;i++)expect((await cast(players[i],players[(i+1)%count].player_id)).status).toBe(200);
+    const result=(await snapshot(host)).round!;expect(result.phase).toBe('FINAL_RESULT');expect(result.vote!.outcome).toBe('DRAW');expect(result.vote!.selected_player_id).toBeNull();expect(result.vote!.tallies).toHaveLength(2);
+    expect((await snapshot(host)).players.every(p=>p.wins===0)).toBe(true);
+    const ended=await db.query<{n:number}>('select count(*)::int n from app_private.rounds where id=$1 and ended_at is not null',[result.id]);expect(ended.rows[0].n).toBe(1);
+    expect((await game(players[1],'return_lobby',{round_id:result.id})).status).toBe(403);
+    expect((await game(host,'return_lobby',{round_id:result.id})).status).toBe(200);expect((await snapshot(host)).round).toBeNull();
+    expect((await game(host,'start_round')).status).toBe(200);await game(host,'cancel_round');
+  });
+  it('limits runoff targets to the tied leaders, but all six participants still vote',async()=>{
+    const p=await voting(6);const first=[1,0,0,0,1,1];
+    for(let i=0;i<6;i++)await cast(p[i],p[first[i]].player_id);
+    const r=(await snapshot(p[0])).round!;expect(r.phase).toBe('VOTE_RUNOFF');expect(r.vote!.candidate_ids.sort()).toEqual([p[0].player_id,p[1].player_id].sort());
+    expect((await cast(p[0],p[2].player_id)).status).toBe(400);expect((await cast(p[0],p[0].player_id)).status).toBe(400);
+    expect((await game(p[2],'submit_vote',{round_id:r.id,ballot_no:1,target_id:p[0].player_id})).status).toBe(409);
+    const second=[1,0,0,0,0,1];for(let i=0;i<6;i++)expect((await cast(p[i],p[second[i]].player_id)).status).toBe(200);
+    const d=(await snapshot(p[0])).round!;expect(d.phase).toBe('REVEAL_VOTE');expect(d.vote!.selected_player_id).toBe(p[0].player_id);expect(d.vote!.tallies).toHaveLength(2);
+  });
+  it('rejects self/foreign/waiter/malformed targets and votes from waiters or another room',async()=>{
+    const p=await voting();const host=p[0];const other=await room(1);const late=await join(host,'투표대기자');const r=(await snapshot(host)).round!;
+    for(const target of [host.player_id,other[0].player_id,late.player_id,'invalid'])expect((await cast(host,target)).status).toBe(400);
+    expect((await game(host,'submit_vote',{round_id:r.id,ballot_no:1,target_id:{id:p[1].player_id}})).status).toBe(400);
+    expect((await cast(late,p[0].player_id)).status).toBe(403);
+    expect((await game(other[0],'submit_vote',{round_id:r.id,ballot_no:1,target_id:p[0].player_id},{room_id:host.room_id,expected_version:(await snapshot(host)).room.version,expected_phase:'VOTE_1'})).status).toBe(403);
+    const dto=await snapshot(late);expect(dto.round!.me).toBeNull();expect(JSON.stringify(dto)).not.toMatch(/voter_id|target_id/);
+  });
+  it('replays a ballot receipt once and never changes or doubles a submitted vote',async()=>{
+    const p=await voting();const host=p[0];const d=await snapshot(host);const r=d.round!;
+    const overrides={request_id:randomUUID(),expected_version:d.room.version,expected_phase:'VOTE_1'};
+    const payload={round_id:r.id,ballot_no:1,target_id:p[1].player_id};
+    const first=await game(host,'submit_vote',payload,overrides);expect(first.status).toBe(200);const response=await first.json();events.length=0;
+    expect(await (await game(host,'submit_vote',payload,overrides)).json()).toEqual(response);expect(events).toHaveLength(0);
+    expect((await game(host,'submit_vote',{...payload,target_id:p[2].player_id},overrides)).status).toBe(409);
+    expect(await (await cast(host,p[2].player_id)).json()).toEqual({error:'ALREADY_VOTED'});
+    expect((await cast(p[1],p[0].player_id,{expected_version:d.room.version})).status).toBe(409);
+    expect((await snapshot(p[1])).round!.me!.voted).toBe(false);
+    expect((await snapshot(host)).round!.vote!.submitted_count).toBe(1);
+  });
+  it('keeps votes inaccessible even to service_role and enforces unique/self/foreign round constraints',async()=>{
+    const p=await voting();const r=(await snapshot(p[0])).round!;await cast(p[0],p[1].player_id);
+    for(const role of ['anon','authenticated','service_role']){await db.exec('set role '+role);try{await expect(db.query('select * from app_private.votes')).rejects.toThrow(/permission denied/);}finally{await db.exec('reset role');}}
+    await expect(db.query('insert into app_private.votes(round_id,ballot_no,voter_id,target_id) values($1,1,$2,$3)',[r.id,p[0].player_id,p[2].player_id])).rejects.toThrow(/unique/);
+    await expect(db.query('insert into app_private.votes(round_id,ballot_no,voter_id,target_id) values($1,1,$2,$2)',[r.id,p[1].player_id])).rejects.toThrow(/check constraint/);
+    const foreign=await room(1);await expect(db.query('insert into app_private.votes(round_id,ballot_no,voter_id,target_id) values($1,1,$2,$3)',[r.id,p[1].player_id,foreign[0].player_id])).rejects.toThrow(/foreign key/);
   });
 });

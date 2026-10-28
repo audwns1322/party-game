@@ -108,7 +108,7 @@ describe('M2 custom words and transitions',()=>{
     }
     const [host]=await room();await game(host,'start_round');const rid=(await snapshot(host)).round!.id;
     await expect(db.query('update app_private.round_players set role=\'citizen\' where round_id=$1',[rid])).rejects.toThrow(/INVALID_ASSIGNMENT/);
-    const {rows}=await db.query<{n:number}>('select count(*)::int n from app_private.builtin_words');expect(rows[0].n).toBe(135);
+    const {rows}=await db.query<{n:number}>('select count(*)::int n from app_private.builtin_words');expect(rows[0].n).toBe(270);
   });
   it('rollback SQL removes only M2 and restores the M1 service-role API',async()=>{
     const restored=new PGlite();
@@ -138,8 +138,8 @@ describe('M2 custom words and transitions',()=>{
   });
 });
 
-async function hints(laps=1,seconds=60) {
-  const players=await room(); const host=players[0]; const dto=await snapshot(host);
+async function hints(laps=1,seconds=60,count=3) {
+  const players=await room(count); const host=players[0]; const dto=await snapshot(host);
   expect((await api.room(request({room_id:host.room_id,action:'update_settings',payload:{hint_rounds:laps,discussion_seconds:seconds},expected_version:dto.room.version,request_id:randomUUID()},host.token))).status).toBe(200);
   expect((await game(host,'start_round')).status).toBe(200);
   const rid=(await snapshot(host)).round!.id;
@@ -147,7 +147,7 @@ async function hints(laps=1,seconds=60) {
   return players;
 }
 async function finishAll(players:Issued[]) {
-  for(let i=0;i<36;i++) {
+  for(let i=0;i<=36;i++) {
     const r=(await snapshot(players[0])).round!; if(r.phase!=='HINT') return;
     const p=players.find(p=>p.player_id===r.current_player_id)!;
     expect((await game(p,'finish_hint',{round_id:r.id,hint_index:r.hint_index})).status).toBe(200);
@@ -155,6 +155,10 @@ async function finishAll(players:Issued[]) {
   throw new Error('Hint cursor did not finish');
 }
 describe('M3 server progression',()=>{
+  it('finishes the maximum 12-player three-lap round at exactly 36 hints',async()=>{
+    const players=await hints(3,60,12);await finishAll(players);
+    const dto=await snapshot(players[0]);expect(dto.round!.hint_index).toBe(36);expect(dto.round!.phase).toBe('DISCUSS');expect(dto.round!.deadline_at).not.toBeNull();
+  });
   it('only the host can explicitly skip a timed discussion, with idempotent retry',async()=>{
     const players=await hints();await finishAll(players);const host=players[0];const dto=await snapshot(host);const rid=dto.round!.id;
     expect((await game(players[1],'start_vote',{round_id:rid,skip_timer:true})).status).toBe(403);
@@ -268,8 +272,9 @@ describe('themes and confusion liar',()=>{
     for(let i=0;i<players.length;i++){const after=(await snapshot(players[i])).round!;expect(after.phase).toBe('PAUSED_HOST');expect(after.theme).toBe(r.theme);expect(after.me!.word).toBe(before[i].round!.me!.word);}
     const late=await join(host,'테마대기자');const dto=await snapshot(late);expect(dto.round!.me).toBeNull();expect(JSON.stringify(dto)).not.toMatch(/liar_word|easy_word|hard_word/);
   });
-  it('has 15 words per theme and every reviewed easy/hard partner is distinct and in the same theme',async()=>{
-    const {rows}=await db.query<{category:string;n:number}>(`select category,count(*)::int n from app_private.builtin_words group by category`);expect(rows).toHaveLength(9);expect(rows.every(r=>r.n===15)).toBe(true);
+  it('has 30 words per theme and every reviewed easy/hard partner is distinct and in the same theme',async()=>{
+    const {rows}=await db.query<{category:string;n:number}>(`select category,count(*)::int n from app_private.builtin_words group by category`);expect(rows).toHaveLength(9);expect(rows.every(r=>r.n===30)).toBe(true);
+    const unique=await db.query<{n:number}>(`select count(distinct word)::int n from app_private.builtin_words`);expect(unique.rows[0].n).toBe(270);
     const invalid=await db.query<{n:number}>(`select count(*)::int n from app_private.builtin_words w left join app_private.builtin_words e on e.category=w.category and e.word=w.easy_word left join app_private.builtin_words h on h.category=w.category and h.word=w.hard_word where e.word is null or h.word is null or w.word=w.easy_word or w.word=w.hard_word or w.easy_word=w.hard_word`);expect(invalid.rows[0].n).toBe(0);
   });
 });

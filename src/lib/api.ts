@@ -5,21 +5,29 @@ export const THEMES = ['음식','동물','생활용품','장소','취미','자�
 export type Settings = {
   word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300;
   theme?: 'random' | typeof THEMES[number]; custom_theme?: string;
-  game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard';
+  game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard'; liar_count?: 1 | 2;
 };
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
-export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'VOTE_1' | 'VOTE_RUNOFF' | 'REVEAL_VOTE' | 'FINAL_RESULT';
+export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'VOTE_1' | 'VOTE_RUNOFF' | 'REVEAL_VOTE' | 'REVEAL_LIAR' | 'GUESS' | 'APPEAL_WINDOW' | 'APPEAL_VOTE' | 'FINAL_RESULT';
 export type RoundSnapshot = {
   id: string; phase: Exclude<GamePhase,'LOBBY'>; version: number; participant_ids: string[];
   submitted_count: number; acknowledged_count: number;
+  liar_count?: 1 | 2;
   theme?: string; game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard';
   hint_index: number; hint_round: number; hint_rounds: number; current_player_id: string | null;
   deadline_at: string | null; remaining_ms: number | null; paused_phase: 'HINT' | 'DISCUSS' | null;
-  me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null; voted?: boolean } | null;
+  me: { submitted: boolean; acknowledged: boolean; role: 'citizen' | 'liar' | null; word: string | null; voted?: boolean; eliminated?: boolean } | null;
+  eliminated_ids?: string[];
   vote?: {
-    ballot_no: number; candidate_ids: string[]; submitted_count: number;
+    ballot_no: number; cycle_no?: number; candidate_ids: string[]; submitted_count: number;
     tallies: {ballot_no:number; counts:{player_id:string; votes:number}[]}[];
     selected_player_id: string | null; outcome: 'DRAW' | null;
+  };
+  m5?: {
+    selected_player_id: string | null; selected_role: 'citizen' | 'liar' | null;
+    guess_id: string | null; answer: string | null; provisional_correct: boolean | null; resolved_correct: boolean | null;
+    citizen_count: number; appeal_submitted_count: number; my_appeal_voted: boolean;
+    winner: 'citizen' | 'liar' | 'DRAW' | null; reason: string | null; correct_word: string | null; liar_ids: string[] | null;
   };
 };
 export type RoomSnapshot = {
@@ -70,7 +78,7 @@ const MESSAGES: Record<string, string> = {
   ROOM_NOT_FOUND: '방을 찾을 수 없어요. 코드를 확인하거나, 이미 종료된 방일 수 있어요.',
   ROOM_LOCKED: '방장이 입장을 잠갔어요. 방장에게 잠금 해제를 부탁해 주세요.',
   PLAYER_NOT_FOUND: '이미 나간 참가자예요.',
-  ROOM_FULL: '방이 가득 찼어요. (최대 12명)',
+  ROOM_FULL: '방이 가득 찼어요. (최대 15명)',
   NICKNAME_TAKEN: '이미 있거나 너무 비슷한 닉네임이에요.',
   RECOVERY_FAILED: '복구 코드가 맞지 않아요.',
   HOST_ONLY: '방장만 할 수 있어요.',
@@ -80,7 +88,7 @@ const MESSAGES: Record<string, string> = {
   VERSION_CONFLICT: '방 상태가 바뀌었어요. 다시 시도해 주세요.',
   PHASE_CONFLICT: '게임 단계가 바뀌었어요. 최신 화면에서 다시 시도해 주세요.',
   REQUEST_CONFLICT: '요청 내용이 달라졌어요. 최신 상태를 확인해 주세요.',
-  PLAYER_COUNT: '게임은 3~12명일 때 시작할 수 있어요.',
+  PLAYER_COUNT: '게임은 3~15명일 때 시작할 수 있어요.',
   PLAYERS_OFFLINE: '자리 비움인 참가자가 있어요. 모두 돌아온 후 시작해 주세요.',
   ROUND_ACTIVE: '현재 판을 먼저 취소해 주세요.',
   NOT_ROUND_PLAYER: '이번 판은 관전할 수 없어요. 다음 판을 기다려 주세요.',
@@ -90,6 +98,10 @@ const MESSAGES: Record<string, string> = {
   ALREADY_ACKNOWLEDGED: '이미 역할을 확인했어요.',
   ALREADY_VOTED: '이미 투표했어요. 제출한 표는 바꿀 수 없어요.',
   INVALID_TARGET: '본인을 제외한 이번 투표의 후보를 선택해 주세요.',
+  INVALID_GUESS: '정답은 보이는 글자 1~60자로 입력해 주세요.',
+  NOT_GUESSER: '지목된 라이어만 정답 도전을 할 수 있어요.',
+  CITIZEN_ONLY: '시민만 이의 제기와 판정 투표에 참여할 수 있어요.',
+  ALREADY_APPEAL_VOTED: '이미 판정 투표를 제출했어요.',
   ROOM_CLOSED: '종료된 방이에요.',
   FORBIDDEN: '이 방의 참가자가 아니에요. 나갔거나 내보내졌을 수 있어요.',
   RATE_LIMITED: '요청이 너무 많아요. 몇 분 뒤에 다시 시도해 주세요.',

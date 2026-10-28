@@ -35,7 +35,7 @@ beforeAll(async()=>{
 afterAll(async()=>{ await db.close(); });
 
 describe('M2 assignment and secrecy',()=>{
-  it.each([3,4,5,6,7,8,9,10,11,12])('assigns exactly one liar and freezes all %i participants',async count=>{
+  it.each([3,4,5,6,7,8,9,10,11,12,13,14,15])('assigns exactly one liar and freezes all %i participants',async count=>{
     const players=await room(count); const host=players[0];
     expect((await game(host,'start_round')).status).toBe(200);
     const dto=await snapshot(host); expect(dto.round?.participant_ids).toHaveLength(count);
@@ -115,6 +115,8 @@ describe('M2 custom words and transitions',()=>{
     try {
       await restored.exec('create role anon; create role authenticated; create role service_role;');
       for(const file of (await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort())await restored.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
+      await restored.exec(await readFile('supabase/rollback/m5.sql','utf8'));
+      await restored.exec(await readFile('supabase/rollback/capacity_liars.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m4.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/themes_word_modes.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m3.sql','utf8'));
@@ -148,7 +150,7 @@ async function hints(laps=1,seconds=60,count=3) {
   return players;
 }
 async function finishAll(players:Issued[]) {
-  for(let i=0;i<=36;i++) {
+  for(let i=0;i<=45;i++) {
     const r=(await snapshot(players[0])).round!; if(r.phase!=='HINT') return;
     const p=players.find(p=>p.player_id===r.current_player_id)!;
     expect((await game(p,'finish_hint',{round_id:r.id,hint_index:r.hint_index})).status).toBe(200);
@@ -247,7 +249,7 @@ describe('themes and confusion liar',()=>{
       const r=(await snapshot(host)).round!;
       const {rows}=await db.query<{word:string;liar_word:string|null;easy_word:string;hard_word:string}>(`select s.word,s.liar_word,w.easy_word,w.hard_word from app_private.round_secrets s join app_private.builtin_words w on w.category=s.category and w.word=s.word where s.round_id=$1`,[r.id]);
       expect(rows[0].liar_word).toBe(mode==='classic'?null:mode==='easy'?rows[0].easy_word:rows[0].hard_word);
-      for(const p of players){const own=(await snapshot(p)).round!;expect(own.theme).toBe(theme);expect(own.game_mode).toBe(mode==='classic'?'classic':'confusion');expect(own.me!.word).toBe(own.me!.role==='liar'?rows[0].liar_word:rows[0].word);expect(Object.keys(own.me!).sort()).toEqual(['acknowledged','role','submitted','voted','word']);}
+      for(const p of players){const own=(await snapshot(p)).round!;expect(own.theme).toBe(theme);expect(own.game_mode).toBe(mode==='classic'?'classic':'confusion');expect(own.me!.word).toBe(own.me!.role==='liar'?rows[0].liar_word:rows[0].word);expect(Object.keys(own.me!).sort()).toEqual(['acknowledged','eliminated','role','submitted','voted','word']);}
       expect((await game(host,'cancel_round')).status).toBe(200);
     }
   });
@@ -280,7 +282,7 @@ describe('themes and confusion liar',()=>{
   });
 });
 async function voting(count=3){const players=await hints(1,0,count);await finishAll(players);const r=(await snapshot(players[0])).round!;expect((await game(players[0],'start_vote',{round_id:r.id})).status).toBe(200);return players;}
-async function cast(s:Issued,target:string,overrides:object={}){const r=(await snapshot(s)).round!;return game(s,'submit_vote',{round_id:r.id,ballot_no:r.vote!.ballot_no,target_id:target},overrides);}
+async function cast(s:Issued,target:string,overrides:object={}){const r=(await snapshot(s)).round!;return game(s,'submit_vote',{round_id:r.id,ballot_no:r.vote!.ballot_no,cycle_no:r.vote!.cycle_no,target_id:target},overrides);}
 describe('M4 private voting',()=>{
   it.each([3,6,12])('tallies %i voters once, hides partial totals and chooses one player',async count=>{
     const players=await voting(count);const host=players[0];
@@ -353,4 +355,87 @@ describe('M4 result host handoff',()=>{
     const inherited=await snapshot(late);expect(inherited.me.is_host).toBe(true);expect(inherited.round!.me).toBeNull();
     expect((await game(late,'return_lobby',{round_id:result.id})).status).toBe(200);expect((await snapshot(late)).round).toBeNull();
   });
+});
+
+describe('15-player capacity and two liars',()=>{
+ it('freezes two liars among 15 players and completes all 45 hints',async()=>{
+  const p=await room(15);const host=p[0];expect((await settings(host,{liar_count:2,hint_rounds:3})).status).toBe(200);expect((await game(host,'start_round')).status).toBe(200);const r=(await snapshot(host)).round!;
+  expect(r.participant_ids).toHaveLength(15);expect(r.liar_count).toBe(2);let liars=0;for(const s of p){const me=(await snapshot(s)).round!.me!;if(me.role==='liar'){liars++;expect(me.word).toBeNull();}await game(s,'ack_role',{round_id:r.id});}expect(liars).toBe(2);
+  await finishAll(p);expect((await snapshot(host)).round!.hint_index).toBe(45);expect((await snapshot(host)).round!.phase).toBe('DISCUSS');
+  await expect(db.query("update app_private.round_players set role='liar' where round_id=$1 and player_id=(select player_id from app_private.round_players where round_id=$1 and role='citizen' limit 1)",[r.id])).rejects.toThrow(/INVALID_ASSIGNMENT/);
+ });
+ it('rejects invalid liar settings and excludes both liar candidates in custom mode',async()=>{
+  const p=await room(5),host=p[0];for(const liar_count of [0,3,null,'2'])expect((await settings(host,{liar_count})).status).toBe(400);
+  expect((await settings(host,{word_mode:'custom',custom_theme:'학교',liar_count:2})).status).toBe(200);await game(host,'start_round');const r=(await snapshot(host)).round!;
+  const secret=await db.query<{player_id:string}>("select player_id from app_private.round_players where round_id=$1 and role='liar'",[r.id]);const liars=new Set(secret.rows.map(x=>x.player_id));
+  for(let i=0;i<p.length;i++)expect((await game(p[i],'submit_word',{round_id:r.id,word:(liars.has(p[i].player_id)?'제외단어':'시민단어')+i})).status).toBe(200);
+  for(const s of p){const d=(await snapshot(s)).round!;if(liars.has(s.player_id))expect(d.me!.word).toBeNull();else expect(d.me!.word).toMatch(/^시민단어/);}
+ });
+});
+async function m5Setup(count=5,liar_count=1){
+ const p=await room(count);await settings(p[0],{liar_count,discussion_seconds:0});await game(p[0],'start_round');const rid=(await snapshot(p[0])).round!.id;
+ await db.query("update app_private.round_secrets set word='돈가스' where round_id=$1",[rid]);
+ const roles=await db.query<{player_id:string;role:string}>('select player_id,role from app_private.round_players where round_id=$1',[rid]);const ids=new Set(roles.rows.filter(x=>x.role==='liar').map(x=>x.player_id));
+ for(const s of p)await game(s,'ack_role',{round_id:rid});await finishAll(p);await game(p[0],'start_vote',{round_id:rid});
+ return{p,rid,liars:p.filter(s=>ids.has(s.player_id)),citizens:p.filter(s=>!ids.has(s.player_id))};
+}
+async function expire(s:Issued){await db.query("update app_private.rounds set deadline_at=clock_timestamp()-interval '1 second' where room_id=$1 and ended_at is null",[s.room_id]);return snapshot(s);}
+async function accuse(p:Issued[],target:Issued){const active=(await snapshot(p[0])).round!.participant_ids;const alive=p.filter(s=>active.includes(s.player_id));for(const s of alive)expect((await cast(s,s.player_id===target.player_id?alive.find(x=>x.player_id!==s.player_id)!.player_id:target.player_id)).status).toBe(200);}
+async function reveal(s:Issued){expect((await expire(s)).round!.phase).toBe('REVEAL_LIAR');return expire(s);}
+async function guess(s:Issued,answer:string,overrides:object={}){const r=(await snapshot(s)).round!;return game(s,'submit_guess',{round_id:r.id,answer},overrides);}
+async function appeal(s:Issued){const r=(await snapshot(s)).round!;return game(s,'open_appeal',{round_id:r.id,guess_id:r.m5!.guess_id});}
+async function judge(s:Issued,accept:boolean,overrides:object={}){const r=(await snapshot(s)).round!;return game(s,'submit_appeal_vote',{round_id:r.id,guess_id:r.m5!.guess_id,accept},overrides);}
+describe('M5 outcomes and normalization',()=>{
+ it.each([['돈가스','돈까스'],['가나','가나'],['Blue Sky','  blue   SKY  '],['버피','BURPEE']])('recognizes %s / %s without exposing the canonical word early',async(word,answer)=>{
+  const{p,rid,liars}=await m5Setup(3);await db.query('update app_private.round_secrets set word=$1 where round_id=$2',[word,rid]);await accuse(p,liars[0]);
+  expect((await snapshot(liars[0])).round!.m5!.selected_role).toBeNull();expect((await reveal(p[0])).round!.phase).toBe('GUESS');
+  expect((await guess(liars[0],answer)).status).toBe(200);const pending=await snapshot(liars[0]);expect(pending.round!.m5!.provisional_correct).toBe(true);expect(pending.round!.m5!.correct_word).toBeNull();expect(pending.round!.m5!.liar_ids).toBeNull();expect(pending.round!.me!.word).toBeNull();
+  const final=await expire(p[0]);expect(final.round!.m5!.winner).toBe('liar');expect(final.round!.m5!.correct_word).toBe(word);
+  const before=final.players.map(p=>p.wins);await snapshot(p[0]);await snapshot(p[1]);expect((await snapshot(p[0])).players.map(p=>p.wins)).toEqual(before);
+ });
+ it('awards the liar team when a citizen is accused, once only',async()=>{
+  const{p,rid,liars,citizens}=await m5Setup(5,2);await accuse(p,citizens[0]);const final=await reveal(p[0]);expect(final.round!.phase).toBe('FINAL_RESULT');expect(final.round!.m5!.winner).toBe('liar');expect(final.round!.m5!.liar_ids).toHaveLength(2);
+  expect(final.players.filter(x=>liars.some(l=>l.player_id===x.id)).every(x=>x.wins===1)).toBe(true);expect(final.players.filter(x=>citizens.some(c=>c.player_id===x.id)).every(x=>x.wins===0)).toBe(true);
+  const second=await db.query<{v:boolean}>("select app_private.finalize_result($1,'citizen','duplicate') v",[rid]);expect(second.rows[0].v).toBe(false);expect((await snapshot(p[0])).players.map(x=>x.wins)).toEqual(final.players.map(x=>x.wins));
+  expect((await game(p[0],'return_lobby',{round_id:rid})).status).toBe(200);expect((await snapshot(p[0])).round).toBeNull();expect((await game(p[0],'start_round')).status).toBe(200);await game(p[0],'cancel_round');
+ });
+ it('allows only the selected liar to guess once and replays the original receipt',async()=>{
+  const{p,liars,citizens}=await m5Setup(5,2);await accuse(p,liars[0]);await reveal(p[0]);
+  expect((await guess(liars[1],'돈가스')).status).toBe(403);expect((await guess(citizens[0],'돈가스')).status).toBe(403);
+  for(const bad of ['','가'.repeat(61),'돈\u200b가스'])expect((await guess(liars[0],bad)).status).toBe(400);
+  const before=await snapshot(liars[0]);const overrides={expected_version:before.room.version,expected_phase:'GUESS',request_id:randomUUID()};const first=await guess(liars[0],'오답',overrides);expect(first.status).toBe(200);const data=await first.json();
+  expect(await (await guess(liars[0],'오답',overrides)).json()).toEqual(data);expect((await guess(liars[0],'다른답',overrides)).status).toBe(409);expect((await guess(liars[0],'다른답')).status).toBe(409);
+ });
+ it.each([false,true])('eliminates the first liar, then resolves the second guess (correct=%s) for the full team',async finalCorrect=>{
+  const{p,rid,liars,citizens}=await m5Setup(5,2);await accuse(p,liars[0]);await reveal(p[0]);await guess(liars[0],'오답');
+  const next=await expire(p[0]);expect(next.round!.phase).toBe('DISCUSS');expect(next.round!.vote!.cycle_no).toBe(2);expect(next.round!.participant_ids).toHaveLength(4);expect(next.round!.eliminated_ids).toEqual([liars[0].player_id]);expect(next.round!.m5!.correct_word).toBeNull();expect(next.players.every(x=>x.wins===0)).toBe(true);
+  await game(p[0],'start_vote',{round_id:rid});expect((await cast(liars[0],liars[1].player_id)).status).toBe(403);expect((await cast(citizens[0],liars[0].player_id)).status).toBe(400);
+  const r=(await snapshot(citizens[0])).round!;expect((await game(citizens[0],'submit_vote',{round_id:rid,ballot_no:1,cycle_no:1,target_id:liars[1].player_id})).status).toBe(409);expect(r.vote!.cycle_no).toBe(2);
+  await accuse(p,liars[1]);await reveal(p[0]);await guess(liars[1],finalCorrect?'돈가스':'오답');const final=await expire(p[0]);expect(final.round!.m5!.winner).toBe(finalCorrect?'liar':'citizen');expect(final.round!.eliminated_ids).toHaveLength(finalCorrect?1:2);
+  expect(final.players.filter(x=>citizens.some(c=>c.player_id===x.id)).every(x=>x.wins===(finalCorrect?0:1))).toBe(true);expect(final.players.filter(x=>liars.some(l=>l.player_id===x.id)).every(x=>x.wins===(finalCorrect?1:0))).toBe(true);
+ });
+ it.each([3,2,0])('appeal accepts only an overall majority: %i yes votes out of four citizens',async yes=>{
+  const{p,liars,citizens}=await m5Setup();await accuse(p,liars[0]);await reveal(p[0]);await guess(liars[0],'오답');expect((await appeal(liars[0])).status).toBe(403);expect((await appeal(citizens[0])).status).toBe(200);
+  const start=await snapshot(citizens[0]);expect(start.round!.m5!.citizen_count).toBe(4);expect(start.round!.phase).toBe('APPEAL_VOTE');expect((await judge(liars[0],true)).status).toBe(403);
+  for(let i=0;i<yes;i++)expect((await judge(citizens[i],true)).status).toBe(200);
+  const final=yes===3?await snapshot(p[0]):await expire(p[0]);expect(final.round!.m5!.winner).toBe(yes===3?'liar':'citizen');expect(JSON.stringify(final)).not.toMatch(/voter_id|target_id|opened_by/);
+ });
+ it('rejects duplicate appeal votes and resolves an all-submitted rejection without counting abstentions as votes',async()=>{
+  const{p,liars,citizens}=await m5Setup();await accuse(p,liars[0]);await reveal(p[0]);await guess(liars[0],'돈가스');await appeal(citizens[0]);
+  expect((await judge(citizens[0],false)).status).toBe(200);expect(await (await judge(citizens[0],true)).json()).toEqual({error:'ALREADY_APPEAL_VOTED'});
+  for(let i=1;i<citizens.length;i++)expect((await judge(citizens[i],false)).status).toBe(200);
+  const final=await snapshot(p[0]);expect(final.round!.m5!.winner).toBe('citizen');expect(final.round!.m5!.appeal_submitted_count).toBe(4);
+ });
+ it('does not award cancelled guesses and keeps all guess/appeal/result/alias tables private',async()=>{
+  const{p,rid,liars}=await m5Setup(3);await accuse(p,liars[0]);await reveal(p[0]);await guess(liars[0],'돈가스');await game(p[0],'cancel_round');
+  expect((await snapshot(p[0])).round).toBeNull();const rows=await db.query<{n:number}>('select count(*)::int n from app_private.round_results where round_id=$1',[rid]);expect(rows.rows[0].n).toBe(0);expect((await snapshot(p[0])).players.every(x=>x.wins===0)).toBe(true);
+  for(const role of ['anon','authenticated','service_role']){await db.exec('set role '+role);try{for(const table of ['guesses','appeals','appeal_votes','round_results','word_aliases'])await expect(db.query('select * from app_private.'+table)).rejects.toThrow(/permission denied/);}finally{await db.exec('reset role');}}
+ });
+});
+
+describe('M5 completed-round lifecycle',()=>{
+ it('does not redisplay an older result after a legacy direct restart followed by cancellation',async()=>{
+  const{p,citizens}=await m5Setup(3);await accuse(p,citizens[0]);await reveal(p[0]);expect((await snapshot(p[0])).round!.phase).toBe('FINAL_RESULT');
+  expect((await game(p[0],'start_round',{}, {expected_phase:'LOBBY'})).status).toBe(200);await game(p[0],'cancel_round');expect((await snapshot(p[0])).round).toBeNull();
+ });
 });

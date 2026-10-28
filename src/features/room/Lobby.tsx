@@ -6,7 +6,7 @@ import { clearSession, type StoredSession } from '../../lib/session';
 import { useRoom } from './useRoom';
 import { RoundPanel } from './RoundPanel';
 
-const MAX_PLAYERS = 12;
+const MAX_PLAYERS = 15;
 const MIN_PLAYERS = 3;
 
 /** Two-step confirm without native confirm(): first tap arms, second tap within 4s runs. */
@@ -182,10 +182,17 @@ export function Lobby({ session }: { session: StoredSession }) {
           <p className="hint">기본 라이어로 진행해요. 각자 테마에 맞는 단어 하나만 제출해 주세요.</p>
         </>}
         <label>힌트 바퀴 수
+          <span className="hint">라이어 수와 힌트 바퀴 수는 시작 후 바꿀 수 없어요.</span>
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.hint_rounds} onChange={(e) => setting({ hint_rounds: Number(e.target.value) as Settings['hint_rounds'] })}>
             {[1, 2, 3].map((n) => <option key={n} value={n}>{n}바퀴</option>)}
           </select>
         </label>
+        <label>라이어 수
+          <select disabled={!isHost || busy || Boolean(round)} value={room.settings.liar_count ?? 1} onChange={e => void setting({liar_count:Number(e.target.value) as 1 | 2})}>
+            <option value={1}>1명</option><option value={2}>2명</option>
+          </select>
+        </label>
+        {room.settings.liar_count === 2 && <p className="hint">2명 모두 잡아야 시민 팀이 이겨요. 5명 이상일 때 권장해요.</p>}
         <label>토론 시간
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.discussion_seconds} onChange={(e) => setting({ discussion_seconds: Number(e.target.value) as Settings['discussion_seconds'] })}>
             {[60, 120, 180, 300].map((s) => <option key={s} value={s}>{s / 60}분</option>)}

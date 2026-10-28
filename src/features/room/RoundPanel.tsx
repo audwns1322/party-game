@@ -10,18 +10,19 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   const [voteTarget,setVoteTarget] = useState('');
   const [confirmVote,setConfirmVote] = useState('');
   const round = snapshot.round!;
+  const deadline = round.phase === 'PAUSED_DISCONNECT' ? round.disconnect?.grace_until : round.deadline_at;
   const [clock,setClock] = useState({ serverNow:snapshot.server_now, elapsed:0 });
   useEffect(() => {
-    if (!round.deadline_at) return;
+    if (!deadline) return;
     const started = performance.now();
     const timer = setInterval(() => setClock({serverNow:snapshot.server_now,elapsed:performance.now()-started}),250);
     return () => clearInterval(timer);
-  }, [snapshot,round.phase,round.deadline_at]);
+  }, [snapshot,round.phase,deadline]);
   const elapsed = clock.serverNow === snapshot.server_now ? clock.elapsed : 0;
-  const remaining = round.deadline_at && snapshot.server_now
-    ? Math.max(0,Math.ceil((Date.parse(round.deadline_at)-Date.parse(snapshot.server_now)-elapsed)/1000)) : null;
+  const remaining = deadline && snapshot.server_now
+    ? Math.max(0,Math.ceil((Date.parse(deadline)-Date.parse(snapshot.server_now)-elapsed)/1000)) : null;
   const currentName = snapshot.players.find(p => p.id === round.current_player_id)?.nickname;
-  const titles = { COLLECT_WORDS:'제시어 후보 제출', REVEAL_ROLE:'내 역할 확인', HINT:'차례대로 힌트', DISCUSS:'자유 토론', PAUSED_HOST:'잠시 멈췄어요', VOTE_1:'비밀 투표', VOTE_RUNOFF:'동률 재투표', REVEAL_VOTE:'투표 집계', REVEAL_LIAR:'라이어 여부 공개', GUESS:'정답 도전', APPEAL_WINDOW:'잠정 판정', APPEAL_VOTE:'시민 판정 투표', FINAL_RESULT:'최종 결과' };
+  const titles = { COLLECT_WORDS:'제시어 후보 제출', REVEAL_ROLE:'내 역할 확인', HINT:'차례대로 힌트', DISCUSS:'자유 토론', PAUSED_HOST:'잠시 멈췄어요', PAUSED_DISCONNECT:'재접속을 기다리고 있어요', VOTE_1:'비밀 투표', VOTE_RUNOFF:'동률 재투표', REVEAL_VOTE:'투표 집계', REVEAL_LIAR:'라이어 여부 공개', GUESS:'정답 도전', APPEAL_WINDOW:'잠정 판정', APPEAL_VOTE:'시민 판정 투표', FINAL_RESULT:'최종 결과' };
   const playerName = (id:string) => snapshot.players.find(p => p.id === id)?.nickname ?? '참가자';
   useEffect(() => {
     if (!confirmCancel) return;
@@ -39,6 +40,7 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
     document.addEventListener('visibilitychange',hide);
     return () => { window.removeEventListener('blur',hide); document.removeEventListener('visibilitychange',hide); };
   }, []);
+  if (!round.me) return <section className="card"><h2>다음 판을 기다리고 있어요</h2><p>게임이 진행 중이에요. 이번 판이 끝나면 함께 시작할 수 있어요.</p></section>;
   return <section className="card" aria-labelledby="round-title">
     <h2 id="round-title">{titles[round.phase]}</h2>
     {round.theme && <p className="notice">공통 테마: <strong>{round.theme}</strong></p>}
@@ -46,6 +48,13 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
     {Boolean(round.eliminated_ids?.length) && <p>탈락한 라이어: {round.eliminated_ids!.map(playerName).join(', ')}</p>}
     {round.me?.eliminated && <p className="notice">탈락했어요. 남은 진행을 지켜봐 주세요. 투표에는 참여할 수 없어요.</p>}
     {round.game_mode === 'confusion' && <p>혼선 라이어 · {round.difficulty === 'hard' ? '하드' : '이지'}</p>}
+    {round.phase === 'PAUSED_DISCONNECT' && round.disconnect && <div className="notice">
+      <p role="status">{round.disconnect.missing_ids.map(playerName).join(', ')}님의 연결이 끊겨 진행을 멈췄어요. 모두 돌아오면 자동으로 이어져요.</p>
+      <p role="timer">{remaining === 0 ? '복귀 유예가 끝났어요.' : `복귀 유예 ${remaining ?? '…'}초`}</p>
+      {round.disconnect.remaining_ms !== null && <p>게임에 남은 시간 {Math.ceil(round.disconnect.remaining_ms/1000)}초를 보관했어요.</p>}
+      {snapshot.me.is_host && remaining === 0 && <button disabled={busy} onClick={() => void run('wait_reconnect',{round_id:round.id})}>30초 더 기다리기</button>}
+      <p>방장이 돌아오지 않으면 연결된 이번 판 참가자에게 방장 권한을 자동으로 넘겨요.</p>
+    </div>}
     {!round.me ? <p>게임이 진행 중이에요. 다음 판부터 함께할 수 있어요.</p> : <>
       {round.phase === 'COLLECT_WORDS' ? <>
         <p>공통 테마에 맞는 단어를 하나씩 제출해요. 라이어 후보는 선택에서 제외돼요.</p>
@@ -110,7 +119,7 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
     </>}
     {(round.me || round.phase==='FINAL_RESULT') && ['REVEAL_LIAR','GUESS','APPEAL_WINDOW','APPEAL_VOTE','FINAL_RESULT'].includes(round.phase) && <ResultPanel snapshot={snapshot} busy={busy} remaining={remaining} run={run} />}
     {snapshot.me.is_host && round.phase === 'FINAL_RESULT' && <button className="primary" disabled={busy} onClick={() => void run('return_lobby',{round_id:round.id})}>대기실로 · 다시 하기</button>}
-    {snapshot.me.is_host && round.phase !== 'FINAL_RESULT' && <button className="danger" disabled={busy} onClick={() => {
+    {snapshot.me.is_host && round.phase !== 'FINAL_RESULT' && <button className="danger" disabled={busy || (round.phase === 'PAUSED_DISCONNECT' && remaining !== 0)} onClick={() => {
       if (confirmCancel) void run('cancel_round'); else setConfirmCancel(true);
     }}>{confirmCancel ? '한 번 더 누르면 점수 없이 취소해요' : '현재 판 취소'}</button>}
   </section>;

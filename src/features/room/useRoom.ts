@@ -79,7 +79,7 @@ export function useRoom(session: Session) {
   }, [session, refresh]);
 
   useEffect(() => {
-    if (fatal || !['DISCUSS','REVEAL_VOTE','REVEAL_LIAR','APPEAL_WINDOW','APPEAL_VOTE'].includes(snapshot?.round?.phase ?? '') || !snapshot?.round?.deadline_at) return;
+    if (fatal || !['DISCUSS','REVEAL_VOTE','REVEAL_LIAR','APPEAL_WINDOW','APPEAL_VOTE','PAUSED_DISCONNECT'].includes(snapshot?.round?.phase ?? '') || !(snapshot?.round?.deadline_at || snapshot?.round?.disconnect?.grace_until)) return;
     let active = false;
     const timer = setInterval(async () => {
       if (active || document.visibilityState !== 'visible') return;
@@ -87,7 +87,7 @@ export function useRoom(session: Session) {
       try { await refresh(); } finally { active = false; }
     }, 2000);
     return () => clearInterval(timer);
-  }, [fatal, snapshot?.round?.phase, snapshot?.round?.deadline_at, refresh]);
+  }, [fatal, snapshot?.round?.phase, snapshot?.round?.deadline_at, snapshot?.round?.disconnect?.grace_until, refresh]);
 
   /**
    * Run a versioned command. Lobby actions are intent-based, so a VERSION_CONFLICT caused by someone

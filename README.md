@@ -95,6 +95,8 @@ npm run test:integration  # 로컬 Supabase + functions:serve 필요
 
 ## M2: 라운드와 역할 확인
 
+최신 구현은 M6까지 확장되어 최대 15명·라이어 1/2명과 결과/승점·끊김 정지/복구·방장 위임·자동 정리를 지원한다. 현재 상태는 [HANDOFF.md](docs/HANDOFF.md), 연결/정리 검증과 운영 한계는 [M6_VALIDATION.md](docs/M6_VALIDATION.md) 참조. 아래 M2 설명은 당시 단계의 기록이다.
+
 3~12명이 접속한 대기실에서 방장이 시작하면 기본 단어 배정 또는 직접 입력 후보 제출 → 역할 확인 → HINT까지 진행한다. 후보는 시민의 것만 선정하고 본인 역할만 반환하며 라이어에게 정답은 보내지 않는다. 중간 입장자는 다음 판 대기다. 현재 판 취소는 점수 없이 대기실로 돌아간다. 실제 힌트 진행·토론·투표는 후속 단계다.
 
 변경/검증/개발 배포/보류 항목은 [M2_VALIDATION.md](docs/M2_VALIDATION.md). 원격 테스트 `tests/integration/m2-remote.mjs`는 명시적인 개발 프로젝트 opt-in과 공개 key 설정이 필요하며, 이번 실행이 만든 테스트 방만 사용한다. Docker 설치는 필요 없다.

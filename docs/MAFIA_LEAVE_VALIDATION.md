@@ -6,25 +6,31 @@ mafia_round_players에는 생존자로 남는다. 밤 완료 조건은 그 경�
 
 ## 변경
 
-- `supabase/pending/mafia_leave_guard.sql`: 기존 app_private.room_command의 인증·방 행 잠금·버전 검사 뒤에 생존 참가자 퇴장 조건만 추가한다.
+- `supabase/migrations/20261029140001_mafia_leave_guard.sql`: 기존 app_private.room_command의 인증·방 행 잠금·버전 검사 뒤에 생존 참가자 퇴장 조건만 추가한다.
 - 종료되지 않은 REVEAL_ROLE/INTRO/NIGHT/DAY_DISCUSS에서 ROUND_ACTIVE로 거부한다. 기존 Edge 오류 매핑과 메시지를 재사용한다.
 - 탈락자, 이번 판 참가자가 아닌 관전자, 종료/취소된 판과 대기실에서는 기존 퇴장 처리를 따른다. 방장 위임·라이어 규칙·밤 결과 로직은 변경하지 않는다.
 - 기존 함수에 CREATE OR REPLACE를 사용하므로 이름·인자·소유자·실행 권한을 유지한다. 테이블 데이터·Cron·Edge 코드는 변경하지 않는다.
 - 적용 전 MAF-3 테이블 존재와 기존 함수 본문을 확인한다. 독립 변경이 있으면 덮어쓰지 않고 실패한다. 같은 수정안 재실행은 허용하며 기존 행은 수정하지 않는다.
 
-## 원본 및 배포 제한
+## 원본 복구 및 배포 상태
 
-개발 프로젝트 wmgpshtqqsqwgyigxcwl에는 MAF-1~3이 적용되어 있지만 원본 migration,
-프런트엔드와 원래 테스트는 현재 GitHub에서 회수하지 못했다.
-회수한 배포 함수와 테이블 정의 중 퇴장 재현에 필요한 부분만
-`tests/fixtures/mafia-command-deployed.sql`에 데이터 없이 보존했다.
-이 fixture는 배포용 migration이나 전체 MAF-3 복구본이 아니다.
+개발 프로젝트 wmgpshtqqsqwgyigxcwl에는 MAF-1~3이 이미 적용되어 있다.
+GitHub codex/mafia-mvp의 소스 통합 커밋 503b3b5와 문서 0ffd19d를 가져와
+원본 migration 3개, 마피아 UI·서버 코드와 기존 테스트를 복구했다.
+503b3b5의 트리 05ff7f111c08362df8a69d295f760b91fd540725는 회수 문서에 기록된
+이전 57d2e5a의 소스 트리와 일치한다. 이전 커밋 자체를 새로 만들거나 강제 푸시하지 않았다.
+부분 회수 fixture를 삭제하고 원본 migration 전체에 새 보정을 적용해 테스트한다.
 
-누락된 선행 migration 때문에 수정 SQL은 자동 적용되는 migrations/에 넣지 않았다.
-현재 PR은 적용 대기 SQL이며, 배포 완료를 의미하지 않는다.
-원본 migration 복구·개발 DB 이력 재확인·함수 변경 여부 대조 후 CLI로 새 보정 migration을
-만들어 적용 범위와 위험을 보고해야 한다. 사용자 승인 전 원격에 실행하지 않는다.
-이미 적용된 MAF-3 migration은 재실행하지 않는다.
+Supabase CLI migration new로 새 보정 파일을 생성했다. CLI가 생성한 UTC 버전은
+기존의 현지 시각 기준 MAF-3 버전보다 앞서므로, 기존 파일을 유지하고 새 버전만
+현재 최종 버전 20261029140000 다음 순서인 20261029140001로 정렬했다.
+새 보정만 적용해야 하며 이미 적용된 MAF-1~3은 재실행하지 않는다.
+개발 DB 이력과 대상 함수 본문을 재확인했고 선행 상태가 일치한다. 새 보정은 원격 미적용이다.
+PR 기준은 codex/mafia-mvp이며 main 병합·공개 배포는 하지 않는다.
+
+MAF-3의 WHERE 없는 original_role 보정은 새로 추가된 NULL 열을 기존 role로 채우는
+일회성 backfill이다. 마피아 테이블만 대상으로 하며 이후 NOT NULL과 INSERT trigger로 보존한다.
+기존 역할 전향 뒤 재실행하는 SQL로 사용하면 안 된다. 이미 적용된 migration은 수정하지 않았다.
 
 적용 범위는 기존 private 함수 1개 교체다. 위험은 생존자의 진행 중 퇴장을 의도적으로
 거부하는 동작 변화이며, 완료/취소/탈락/관전 경계와 라이어 회귀를 검증했다.
@@ -32,11 +38,12 @@ mafia_round_players에는 생존자로 남는다. 밤 완료 조건은 그 경�
 
 ## 검증
 
-- `npm run test`, `npm run test:sql`: 단위·SQL/실제 Edge 핸들러 156개 통과(마피아 퇴장 18개 포함).
+- `npm run test`, `npm run test:sql`: 단위·SQL/실제 Edge 핸들러 162개 통과(마피아 퇴장 18개 포함). 선행 원본 migration도 빈 DB부터 전부 실행했다.
 - 변경 전 원본 함수에서 필수 행동 참가자 퇴장과 생존 상태 잔존을 재현했다.
 - 변경 후 4개 진행 단계 거부, 반복 요청의 무변경/무알림, 방장 보존, 탈락자/관전자/종료 상태 허용, 인증·버전 오류 우선순위, 라이어 퇴장/활성 판 차단을 확인했다.
 - 함수 소유자·권한·security definer/search_path 보존, 무권한 RPC 거부, 반복 적용, 선행 테이블 누락·독립 함수 변경 시 중단을 확인했다. 함수 본문 비교는 CRLF와 줄 끝 공백만 정규화하며 구현 변경은 거부한다.
-- TypeScript·lint·Vite build 통과. Edge 코드는 변경하지 않았다.
-- PGlite는 하나의 PostgreSQL 연결을 사용한다. 반복 요청 검사는 통과했지만 실제 두 연결의 lock 경합이나 원격 동시 요청 검증을 대체하지 않는다. 원격 검증은 미실행이다.
+- TypeScript·lint·Vite build·복구된 Edge 7개 타입 검사 통과. 퇴장 수정은 Edge 배포가 필요하지 않다.
+- 개발 프로젝트에서 기존 `tests/integration/mafia-remote.mjs` 42개 재통과. 권한·역할 배정·첫날 밤·낮 전환과 라이어 방 생성을 확인하고 생성한 방은 종료했다. 수정 후 퇴장 차단 검증은 아니다.
+- PGlite는 하나의 PostgreSQL 연결을 사용한다. 반복 요청 검사는 통과했지만 실제 두 연결의 lock 경합이나 원격 동시 요청 검증을 대체하지 않는다. 새 보정의 원격 검증은 적용 후 수행해야 한다.
 
-프런트엔드 복구, 전체 마피아 권한/역할 검토, 낮 투표·추가 밤 구현은 이 수정 범위에 포함하지 않는다.
+전체 마피아 권한/역할의 추가 검토, 낮 투표·추가 밤 구현은 이 수정 범위에 포함하지 않는다.

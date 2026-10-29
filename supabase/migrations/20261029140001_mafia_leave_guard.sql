@@ -1,4 +1,4 @@
--- Apply only after recovering the missing MAF-1..3 migrations; never replay MAF-3.
+-- Forward correction after MAF-3; never replay MAF-3 on an existing database.
 -- Replaces one existing function; no table data or RPC permissions change.
 do $preflight$
 begin

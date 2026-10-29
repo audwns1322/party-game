@@ -1,12 +1,27 @@
 # HANDOFF (2026-10-29)
 
 ## 현재 작업 (2026-10-29)
-- main은 라이어 M6 PR #9 병합 `e0a2f67`. 재참가 오류 수정은 별도 초안 PR #10이다. 이 작업은 main 기준 `codex/mafia-leave-guard`이며 PR #10의 코드와 분리했다.
-- 개발 DB `wmgpshtqqsqwgyigxcwl`에는 MAF-1 `20261029090000_mafia_lobby`, MAF-2 `20261029110000_mafia_assignment`, MAF-3 `20261029140000_mafia_night`가 모두 적용되어 있다. room-command v8. GitHub의 마피아 브랜치/원본 migration·프런트엔드·테스트 부재와 DB 미적용을 혼동하지 않는다. 기존 migration 재실행 금지.
+- main은 라이어 M6 PR #9 병합 `e0a2f67`. 재참가 오류 수정은 별도 초안 PR #10이다. 이 작업 `codex/mafia-leave-guard`는 원본 마피아 브랜치를 병합 보존했으며 PR #11의 기준은 `codex/mafia-mvp`다. main 병합은 하지 않았다.
+- GitHub `codex/mafia-mvp`가 회수됐다. 소스 통합 `503b3b5`의 트리 해시 `05ff7f111c08362df8a69d295f760b91fd540725`는 회수 문서가 기록한 이전 `57d2e5a`의 소스 트리와 일치한다. `57d2e5a` 자체는 로컬 객체에 없으며 이력은 강제로 재작성하지 않는다. 최신 원본 문서는 `0ffd19d`다.
+- 개발 DB `wmgpshtqqsqwgyigxcwl`에는 MAF-1 `20261029090000_mafia_lobby`, MAF-2 `20261029110000_mafia_assignment`, MAF-3 `20261029140000_mafia_night`가 모두 적용되어 있다. room-command v8. 세 migration·프런트엔드·기존 테스트를 원본 브랜치에서 복구했다. 기존 migration 재실행 금지.
 - 배포 소스로 경찰의 NIGHT 중 퇴장 후 생존 상태가 남는 버그를 로컬에서 재현했다. 생존 참가자의 진행 중 퇴장을 기존 방 행 잠금 안에서 ROUND_ACTIVE로 거부하는 최소 수정안을 준비했다.
-- 수정 SQL은 `supabase/pending/mafia_leave_guard.sql`에만 있으며 원격 미적용이다. 자동 migration 목록에는 누락된 선행 MAF migration을 복구한 뒤 넣는다. 데이터 없는 회수 fixture와 테스트 18개를 추가했다.
-- 기존 라이어 포함 총 156개, 타입·lint·build 통과. 실제 다중 연결 동시성/원격 인수는 미실행. 상세와 적용 범위는 `docs/MAFIA_LEAVE_VALIDATION.md`.
-- 다음 단계는 PR 검토와 원본 migration 복구다. 개발 DB 이력·배포 함수 재확인 및 승인 전 DB 변경·main 병합·공개 배포를 하지 않는다. 아래는 이전 M6 작업의 기록이다.
+- 수정 SQL을 정식 후속 `supabase/migrations/20261029140001_mafia_leave_guard.sql`로 전환했다. 회수용 부분 fixture를 제거하고 실제 migration 전체로 테스트한다. 신규 보정 migration은 원격 미적용이다.
+- 기존 라이어·마피아 포함 총 162개, 타입·lint·build·Edge 7개 타입 통과. 개발 DB에서 복구된 기존 원격 smoke 42개 재통과. 이는 수정 전 배포의 확인이며 새 퇴장 차단의 원격 검증은 아니다. 실제 다중 연결 동시성도 미실행. 상세는 `docs/MAFIA_LEAVE_VALIDATION.md`.
+- 다음 단계는 새 보정 migration 1건의 개발 DB 적용과 수정 후 원격 퇴장/동시성 검증이다. 변경 범위·위험 보고 전에는 적용하지 않고 main 병합·공개 배포는 별도 승인 전 하지 않는다. 아래는 원본 회수 시점까지의 과거 기록이다.
+
+## 원본 회수 시점의 MAF 기록 (2026-10-29, 과거 기록)
+- MAF-3 로컬 구현: `20261029140000_mafia_night.sql`, 자기소개→첫날 밤, 마피아 공격 과반수·경찰 조사·의사 보호(자기 보호 허용)·스파이 직업 조사·기자 공개·배신자 지정 대상 탈락 시 실제 마피아 전향, 전원 행동 완료 시 서버 결과 확정. 탈락자 공개는 정확한 직업이 아닌 시민/마피아 팀. 스파이는 마피아를 알지만 마피아는 스파이를 모름. 최초 역할은 DB에 별도 보존.
+- MAF-3 개발 Supabase 적용 완료: 공식 SQL Editor에서 `20261029140000_mafia_night`와 이력을 한 트랜잭션으로 실행하고 이력·신규 테이블/컬럼 재조회 확인. 적용 직전 활성 마피아 판·역할 기록 0건. `room-command` Edge v8 ACTIVE, MAF 원격 smoke 42개 통과, 테스트 후 열린 방/활성 마피아 판 0건. 로컬 단위 26 + SQL/핸들러 118, 빌드·lint·Edge 타입 통과. 기존 라이어 M6 원격 검사는 이 환경에 `.env.local`이 없어 실행 전 중단(미검증); 공개 프런트엔드 배포 없음.
+- GitHub `codex/mafia-mvp` 원격 브랜치에는 로컬 `57d2e5a`와 동일한 소스 트리(`05ff7f1`)를 통합 커밋 `503b3b5`로 업로드함. HTTPS Git 푸시 인증 부재로 로컬/원격 **커밋 이력이 다름**. 다음 작업 전 원격/로컬 이력을 비교하고, 기존 커밋을 임의로 삭제하거나 강제 푸시하지 말 것.
+- shortcut: 첫날 밤 이후 낮 투표·반복 밤·기자 1회 재사용 제한과 종료 시 전체 역할 공개는 MAF-4/5에서 완결; 장시간 연결 끊김 대응은 MAF-6.
+- MAF-2 역할 배정 구현: 마피아 전용 `mafia_rounds`/`mafia_round_players` 비공개 테이블, 7종 랜덤 배정, 본인 역할만 DTO, 마피아 간 동료 ID, 확인 완료 시 `INTRO` 전환. 밤 행동은 미구현. `20261029110000_mafia_assignment` 개발 DB 적용·이력 확인, `room-command` Edge v7 배포, 실제 4인 원격 smoke 37개 통과 후 테스트 방 0개. 로컬 단위 26 + SQL/핸들러 115, 빌드·lint·Edge 타입 통과.
+- shortcut: 마피아 역할 확인 도중 장기 연결 끊김에 대한 자동 정지/취소는 MAF-6에서 구현; 현재 역할 확인 단계는 참가자 모두의 확인을 기다림.
+- MAF-2 보안 advisor는 비공개 스키마 RLS 무정책 INFO 18건(마피아 신규 비공개 테이블 2건 포함), 심각 경고 없음. 프런트엔드 배포/실기기 확인은 미실행.
+- `main` M6 병합 `e0a2f673`에서 `codex/mafia-mvp` 브랜치 분리. 라이어 기존 경로를 유지하며 마피아 방 종류·7종 직업 설정·서버 권한/인원 검증을 구현 중. 마피아 라운드 시작은 서버/화면에서 차단.
+- 확정 직업: 마피아·스파이·시민·경찰·의사·기자·배신자. 첫날 자기소개→밤→낮 투표, 탈락 마피아 공개·시민 팀 직업 비공개. 배신자는 비밀 미션 성공 시 실제 마피아로 전향. 세부 능력은 후속 마일스톤에서 확정.
+- MAF-1 migration `20261029090000_mafia_lobby.sql`은 기존 전체 함수 권한 변경을 제거한 뒤 개발 Supabase에 적용·이력 확인 완료. `room-create` Edge v4 배포 완료. 원격 smoke 14개 통과, 테스트 방 종료 후 활성 방 0개. 기존 `party-game-maintenance` Cron 변경 없음.
+- 로컬 단위 26개 + SQL/핸들러 113개 통과, 빌드·lint·Edge 타입 검사 통과. 보안 advisor는 기존 비공개 스키마 RLS 무정책 INFO 16건만 표시. 공개 Vercel 프런트엔드는 미배포이므로 새 마피아 UI 실기기 확인 전.
+- Git `codex/mafia-mvp` 로컬 커밋 `eb4d458` 기반. 원격 GitHub 푸시는 자격 증명 미설정으로 실패해 아직 원격 브랜치 없음. `main` 병합/공개 배포 미실행. 아래 M6 내용은 과거 인계 시점 정보이며 현재 main은 PR #9 병합 완료.
 
 ## 공개/로컬 상태
 - main의 M5 기준은 PR #8 merge `264bc3c`. 현재 작업 `codex/m6-resilience`, PR #9 `https://github.com/audwns1322/party-game/pull/9`: M6 끊김 정지/복귀·방장 위임·예약 정리까지 구현·원격·데스크톱 검증 완료. main 통합과 공개 배포는 이 PR에서 관리한다. 최신 병합/배포 상태는 GitHub/Vercel 확인.

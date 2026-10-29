@@ -23,6 +23,7 @@ type Session = { room_id: string; code: string; player_id: string; token: string
 const randomIp = () => `10.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
 const post = (body: object, token?: string, ip = randomIp()) => new Request('https://fn.test', { method: 'POST', headers: { 'x-forwarded-for': `${ip}, 10.0.0.1`, ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
 const create = async (nickname = '방장') => (await (await api.create(post({ nickname }))).json()) as Session;
+const createMafia = async () => (await (await api.create(post({nickname:'마피아방장',game_type:'mafia'}))).json()) as Session;
 const join = (code: string, nickname: string) => api.join(post({ room_code: code, nickname }));
 const snapshot = (s: { token: string }, room: string) => api.snapshot(new Request(`https://fn.test?room_id=${room}`, { headers: { Authorization: `Bearer ${s.token}` } }));
 const command = (s: { token: string }, room: string, action: string, expected_version?: number, payload?: object) => api.command(post({ room_id: room, action, payload, expected_version, request_id: randomUUID() }, s.token));
@@ -42,6 +43,8 @@ describe('database permissions', () => {
       try {
         await expect(db.query('select * from app_private.rooms')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.players')).rejects.toThrow(/permission denied/);
+        await expect(db.query('select * from app_private.mafia_round_players')).rejects.toThrow(/permission denied/);
+        await expect(db.query('select * from app_private.mafia_night_actions')).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_create('닉네임', '닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_join('000000', '닉네임', '닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.player_recover('000000', repeat('a',64), repeat('b',64), repeat('c',64))")).rejects.toThrow(/permission denied/);
@@ -50,11 +53,142 @@ describe('database permissions', () => {
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(15);
+    expect(rows[0].n).toBe(18);
   });
 });
 
 describe('create / join / capacity', () => {
+  it('completes a secret first night without revealing citizen professions',async()=>{
+    const host=await createMafia();const participants=[host];
+    for(let n=1;n<=3;n++)participants.push((await (await join(host.code,`밤검증${n}`)).json()) as Session);
+    expect((await command(host,host.room_id,'mafia_start',await version(host))).status).toBe(200);
+    const roles=new Map<string,string>();
+    for(const p of participants){const d=(await (await snapshot(p,host.room_id)).json()) as {mafia:{me:{role:string}}};roles.set(p.player_id,d.mafia.me.role);}
+    for(const p of participants)expect((await command(p,host.room_id,'mafia_ack',await version(host))).status).toBe(200);
+    expect((await command(participants[1],host.room_id,'mafia_intro_done',await version(host))).status).toBe(403);
+    expect((await command(host,host.room_id,'mafia_intro_done',await version(host))).status).toBe(200);
+    const mafia=participants.find(p=>roles.get(p.player_id)==='mafia')!;
+    const police=participants.find(p=>roles.get(p.player_id)==='police')!;
+    const citizen=participants.find(p=>roles.get(p.player_id)==='citizen')!;
+    expect((await command(citizen,host.room_id,'mafia_night_action',await version(host),{target_id:mafia.player_id})).status).toBe(403);
+    expect((await command(mafia,host.room_id,'mafia_night_action',await version(host),{target_id:citizen.player_id})).status).toBe(200);
+    expect((await command(mafia,host.room_id,'mafia_night_action',await version(host),{target_id:police.player_id})).status).toBe(409);
+    expect((await command(police,host.room_id,'mafia_night_action',await version(host),{target_id:mafia.player_id})).status).toBe(200);
+    const d=(await (await snapshot(citizen,host.room_id)).json()) as {mafia:{phase:string;night_result:{eliminated_player_id:string;eliminated_team:string};me:{investigation:unknown}}};
+    expect(d.mafia.phase).toBe('DAY_DISCUSS');expect(d.mafia.night_result).toMatchObject({eliminated_player_id:citizen.player_id,eliminated_team:'citizen'});
+    expect(d.mafia.me.investigation).toBeNull();
+    const pd=(await (await snapshot(police,host.room_id)).json()) as {mafia:{me:{investigation:{target_id:string;result:string}}}};
+    expect(pd.mafia.me.investigation).toEqual({target_id:mafia.player_id,result:'mafia'});
+  });
+  it('lets only the spy identify mafias and converts a living traitor when the mission target dies',async()=>{
+    const host=await createMafia();const participants=[host];
+    for(let n=1;n<=4;n++)participants.push((await (await join(host.code,`전향검증${n}`)).json()) as Session);
+    const initial=(await (await snapshot(host,host.room_id)).json()) as {room:{settings:{mafia_roles:Record<string,number>}}};
+    const roles={...initial.room.settings.mafia_roles,mafia:1,spy:1,traitor:1,citizen:2,police:0};
+    expect((await command(host,host.room_id,'update_settings',await version(host),{mafia_roles:roles})).status).toBe(200);
+    expect((await command(host,host.room_id,'mafia_start',await version(host))).status).toBe(200);
+    const assigned=new Map<string,{role:string;teammate_ids:string[];mission_target_id:string|null}>();
+    for(const p of participants){const d=(await (await snapshot(p,host.room_id)).json()) as {mafia:{me:{role:string;teammate_ids:string[];mission_target_id:string|null}}};assigned.set(p.player_id,d.mafia.me);}
+    const mafia=participants.find(p=>assigned.get(p.player_id)?.role==='mafia')!;
+    const spy=participants.find(p=>assigned.get(p.player_id)?.role==='spy')!;
+    const traitor=participants.find(p=>assigned.get(p.player_id)?.role==='traitor')!;
+    expect(assigned.get(spy.player_id)!.teammate_ids).toEqual([mafia.player_id]);
+    expect(assigned.get(mafia.player_id)!.teammate_ids).not.toContain(spy.player_id);
+    const target=assigned.get(traitor.player_id)!.mission_target_id!;
+    expect(target).toBeTruthy();expect(assigned.get(target)?.role).toBe('citizen');
+    for(const p of participants)expect((await command(p,host.room_id,'mafia_ack',await version(host))).status).toBe(200);
+    expect((await command(host,host.room_id,'mafia_intro_done',await version(host))).status).toBe(200);
+    expect((await command(spy,host.room_id,'mafia_night_action',await version(host),{target_id:mafia.player_id})).status).toBe(200);
+    expect((await command(mafia,host.room_id,'mafia_night_action',await version(host),{target_id:target})).status).toBe(200);
+    const result=(await (await snapshot(traitor,host.room_id)).json()) as {mafia:{phase:string;winner:string;night_result:{eliminated_team:string};me:{role:string;original_role:string}}};
+    expect(result.mafia.phase).toBe('FINAL_RESULT');expect(result.mafia.winner).toBe('mafia');
+    expect(result.mafia.night_result.eliminated_team).toBe('citizen');
+    expect(result.mafia.me).toMatchObject({role:'mafia',original_role:'traitor'});
+    const spyResult=(await (await snapshot(spy,host.room_id)).json()) as {mafia:{me:{investigation:{result:string}}}};
+    expect(spyResult.mafia.me.investigation.result).toBe('mafia');
+  });
+  it('protects a target and publishes only the journalist-selected profession',async()=>{
+    const host=await createMafia();const participants=[host];
+    for(let n=1;n<=5;n++)participants.push((await (await join(host.code,`보호검증${n}`)).json()) as Session);
+    const initial=(await (await snapshot(host,host.room_id)).json()) as {room:{settings:{mafia_roles:Record<string,number>}}};
+    const roles={...initial.room.settings.mafia_roles,mafia:1,citizen:3,police:0,doctor:1,journalist:1};
+    expect((await command(host,host.room_id,'update_settings',await version(host),{mafia_roles:roles})).status).toBe(200);
+    expect((await command(host,host.room_id,'mafia_start',await version(host))).status).toBe(200);
+    const assigned=new Map<string,string>();
+    for(const p of participants){const d=(await (await snapshot(p,host.room_id)).json()) as {mafia:{me:{role:string}}};assigned.set(p.player_id,d.mafia.me.role);}
+    const mafia=participants.find(p=>assigned.get(p.player_id)==='mafia')!;
+    const doctor=participants.find(p=>assigned.get(p.player_id)==='doctor')!;
+    const journalist=participants.find(p=>assigned.get(p.player_id)==='journalist')!;
+    const target=participants.find(p=>assigned.get(p.player_id)==='citizen')!;
+    for(const p of participants)expect((await command(p,host.room_id,'mafia_ack',await version(host))).status).toBe(200);
+    expect((await command(host,host.room_id,'mafia_intro_done',await version(host))).status).toBe(200);
+    for(const [actor,id] of [[mafia,target.player_id],[doctor,target.player_id],[journalist,mafia.player_id]] as const)
+      expect((await command(actor,host.room_id,'mafia_night_action',await version(host),{target_id:id})).status).toBe(200);
+    const d=(await (await snapshot(target,host.room_id)).json()) as {mafia:{phase:string;night_result:{eliminated_player_id:string|null;journalist:{player_id:string;role:string}}}};
+    expect(d.mafia.phase).toBe('DAY_DISCUSS');expect(d.mafia.night_result.eliminated_player_id).toBeNull();
+    expect(d.mafia.night_result.journalist).toEqual({player_id:mafia.player_id,role:'mafia'});
+  });
+  it('assigns mafia roles privately, rejects competing starts and advances after all acknowledgements',async()=>{
+    const host=await createMafia();
+    const others=[] as Session[];
+    for(let n=1;n<=3;n++) others.push((await (await join(host.code,`비밀참가${n}`)).json()) as Session);
+    const people=[host,...others];
+    expect((await command(others[0],host.room_id,'mafia_start',await version(host))).status).toBe(403);
+    const before=await version(host);
+    expect((await command(host,host.room_id,'mafia_start',before)).status).toBe(200);
+    expect((await command(host,host.room_id,'mafia_start',before)).status).toBe(409);
+    const own=[] as string[];
+    for(const p of people){
+      const dto=(await (await snapshot(p,host.room_id)).json()) as {mafia:{phase:string;me:{role:string;acknowledged:boolean;teammate_ids:string[]};participant_ids:string[]}};
+      expect(dto.mafia.phase).toBe('REVEAL_ROLE');
+      expect(dto.mafia.me.acknowledged).toBe(false);
+      expect(dto.mafia.me.teammate_ids).toEqual([]);
+      expect(dto.mafia.participant_ids).toHaveLength(4);
+      own.push(dto.mafia.me.role);
+      expect(JSON.stringify(dto.mafia)).not.toContain('credential_hash');
+    }
+    expect(own.sort()).toEqual(['citizen','citizen','mafia','police']);
+    expect((await command(host,host.room_id,'update_settings',await version(host),{mafia_roles:{mafia:1}})).status).toBe(409);
+    for(const p of people)expect((await command(p,host.room_id,'mafia_ack',await version(host))).status).toBe(200);
+    const done=(await (await snapshot(host,host.room_id)).json()) as {mafia:{phase:string;acknowledged_count:number}};
+    expect(done.mafia.phase).toBe('INTRO');expect(done.mafia.acknowledged_count).toBe(4);
+    expect((await command(host,host.room_id,'mafia_ack',await version(host))).status).toBe(409);
+  });
+  it('reveals teammates only to mafias, never to citizens or host by privilege',async()=>{
+    const host=await createMafia();const players=[host];
+    for(let n=1;n<=4;n++)players.push((await (await join(host.code,`팀검증${n}`)).json()) as Session);
+    const initial=(await (await snapshot(host,host.room_id)).json()) as {room:{settings:{mafia_roles:Record<string,number>}}};
+    const roles={...initial.room.settings.mafia_roles,mafia:2,citizen:3,police:0};
+    expect((await command(host,host.room_id,'update_settings',await version(host),{mafia_roles:roles})).status).toBe(200);
+    expect((await command(host,host.room_id,'mafia_start',await version(host))).status).toBe(200);
+    const assigned=[] as Array<{player_id:string;role:string;teammate_ids:string[]}>;
+    for(const p of players){
+      const dto=(await (await snapshot(p,host.room_id)).json()) as {mafia:{me:{role:string;teammate_ids:string[]}}};
+      assigned.push({player_id:p.player_id,...dto.mafia.me});
+    }
+    const mafias=assigned.filter(p=>p.role==='mafia');expect(mafias).toHaveLength(2);
+    for(const p of assigned){
+      expect(p.teammate_ids).toEqual(p.role==='mafia'?[mafias.find(x=>x.player_id!==p.player_id)!.player_id]:[]);
+    }
+  });
+  it('isolates mafia lobbies and enforces host-only role configurations', async () => {
+    const host=await createMafia();
+    const guest=(await (await join(host.code,'참가자')).json()) as Session;
+    const state=await (await snapshot(host,host.room_id)).json() as {room:{game_type:string;settings:{mafia_roles:Record<string,number>}}};
+    expect(state.room.game_type).toBe('mafia');
+    const roles={...state.room.settings.mafia_roles,citizen:3};
+    const v=await version(host);
+    expect((await command(guest,host.room_id,'update_settings',v,{mafia_roles:roles})).status).toBe(403);
+    expect((await command(host,host.room_id,'update_settings',v,{mafia_roles:{...roles,mafia:0}})).status).toBe(400);
+    expect((await command(host,host.room_id,'update_settings',v,{mafia_roles:{...roles,spy:2}})).status).toBe(400);
+    expect((await command(host,host.room_id,'update_settings',v,{mafia_roles:roles,word_mode:'custom'})).status).toBe(400);
+    expect((await command(host,host.room_id,'update_settings',v,{mafia_roles:roles})).status).toBe(200);
+    expect((await command(host,host.room_id,'update_settings',v,{mafia_roles:roles})).status).toBe(409);
+    expect(((await (await snapshot(guest,host.room_id)).json()) as typeof state).room.settings.mafia_roles).toEqual(roles);
+    await expect(db.query("select public.game_command(repeat('f',64),$1,'start_round','{}',1,'LOBBY',gen_random_uuid())",[host.room_id])).rejects.toThrow(/FORBIDDEN/);
+    const liar=await create('라이어방장');
+    expect(((await (await snapshot(liar,liar.room_id)).json()) as typeof state).room.game_type).toBe('liar');
+  });
   it('creates a room and returns only the owner session; snapshot hides credentials', async () => {
     const host = await create();
     expect(host.code).toMatch(/^\d{6}$/);

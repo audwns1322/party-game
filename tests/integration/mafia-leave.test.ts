@@ -6,10 +6,9 @@ import { commandHandler } from '../../supabase/functions/_shared/room';
 import { hashToken } from '../../supabase/functions/_shared/security';
 
 const db = new PGlite();
-const patch = await readFile('supabase/pending/mafia_leave_guard.sql', 'utf8');
-const fixture = await readFile('tests/fixtures/mafia-command-deployed.sql', 'utf8');
-const original = fixture.split(/(?=CREATE OR REPLACE FUNCTION )/)
-  .find(sql => sql.startsWith('CREATE OR REPLACE FUNCTION app_private.room_command('))!;
+const migration = '20261029140001_mafia_leave_guard.sql';
+const patch = await readFile(`supabase/migrations/${migration}`, 'utf8');
+let original = '';
 const broadcast = { calls: 0 };
 const handler = commandHandler(async (fn, args) => {
   // Preserve the test transaction when an RPC raises an expected rejection.
@@ -73,10 +72,12 @@ async function rejectsPatch(sql: string) {
 beforeAll(async () => {
   await db.exec('create role anon; create role authenticated; create role service_role;');
   for (const name of (await readdir('supabase/migrations')).filter(x => x.endsWith('.sql')).sort()) {
+    if (name === migration) {
+      original = (await db.query<{ definition: string }>("select pg_get_functiondef('app_private.room_command(text,uuid,text,jsonb,integer)'::regprocedure) as definition")).rows[0].definition;
+    }
     await db.exec(await readFile(`supabase/migrations/${name}`, 'utf8'));
   }
-  await db.exec(fixture);
-  await db.exec(patch);
+  expect(original).toContain('CREATE OR REPLACE FUNCTION app_private.room_command(');
 }, 30000);
 beforeEach(async () => { await db.exec('begin;'); broadcast.calls = 0; });
 afterEach(async () => { await db.exec('rollback;'); });
@@ -195,7 +196,7 @@ it('refuses to overwrite an independently changed room command', async () => {
 });
 
 it('accepts equivalent CRLF formatting without weakening the source drift check', async () => {
-  await db.exec(original.replace(/\n/g, '\r\n'));
+  await db.exec(original.replace(/\r?\n/g, '\r\n'));
   await db.exec(patch);
   const players = await room();
   await round(players);

@@ -30,7 +30,11 @@ MCP 자동 생성 이력 20261029085720은 방금 생성된 대상 행의 이름
 확인하고 파일 버전 20261029140001로 정렬했다. 기존 MAF-1~3 이력은 변경하지 않았고
 최종 대상 이름/버전은 1건이다. 이후 같은 migration을 재실행하지 않는다.
 함수 본문·소유 권한·SECURITY DEFINER·빈 search_path가 예상 상태임을 재조회했다.
-PR 기준은 codex/mafia-mvp이며 main 병합·공개 배포는 하지 않는다.
+사용자 승인으로 PR #11을 codex/mafia-mvp에 병합했다(merge c9ac821).
+병합 커밋의 Vercel 배포 상태는 success이며 Preview 주소는
+https://party-game-git-codex-mafia-mvp-audwns1322.vercel.app 이다.
+Vercel 로그인 보호를 확인했으며 현재 브라우저에 인증 세션이 없어 배포 UI·DB 연결은
+미검증이다. 보호 설정은 유지했다. main 병합·Production 배포는 하지 않았다.
 
 MAF-3의 WHERE 없는 original_role 보정은 새로 추가된 NULL 열을 기존 role로 채우는
 일회성 backfill이다. 마피아 테이블만 대상으로 하며 이후 NOT NULL과 INSERT trigger로 보존한다.

@@ -1,14 +1,14 @@
 # HANDOFF (2026-10-29)
 
 ## 현재 작업 (2026-10-29)
-- main은 라이어 M6 PR #9 병합 `e0a2f67`. 재참가 오류 수정은 별도 초안 PR #10이다. 이 작업 `codex/mafia-leave-guard`는 원본 마피아 브랜치를 병합 보존했으며 PR #11의 기준은 `codex/mafia-mvp`다. main 병합은 하지 않았다.
+- main은 라이어 M6 PR #9 병합 `e0a2f67`. 재참가 오류 수정은 별도 초안 PR #10이다. 사용자 승인으로 PR #11을 `codex/mafia-mvp`에 merge commit `c9ac821`로 병합했다. 현재 작업 브랜치도 `codex/mafia-mvp`이며 main 병합은 하지 않았다.
 - GitHub `codex/mafia-mvp`가 회수됐다. 소스 통합 `503b3b5`의 트리 해시 `05ff7f111c08362df8a69d295f760b91fd540725`는 회수 문서가 기록한 이전 `57d2e5a`의 소스 트리와 일치한다. `57d2e5a` 자체는 로컬 객체에 없으며 이력은 강제로 재작성하지 않는다. 최신 원본 문서는 `0ffd19d`다.
 - 개발 DB `wmgpshtqqsqwgyigxcwl`에는 MAF-1 `20261029090000_mafia_lobby`, MAF-2 `20261029110000_mafia_assignment`, MAF-3 `20261029140000_mafia_night`가 모두 적용되어 있다. room-command v8. 세 migration·프런트엔드·기존 테스트를 원본 브랜치에서 복구했다. 기존 migration 재실행 금지.
 - 경찰의 NIGHT 중 퇴장 후 생존 상태가 남는 버그를 수정했다. 생존 참가자의 진행 중 퇴장을 기존 방 행 잠금 안에서 ROUND_ACTIVE로 거부한다. 탈락자·관전자·종료/취소 후 퇴장은 유지한다.
 - 사용자 승인 후 `20261029140001_mafia_leave_guard`를 개발 DB에 적용했다. MCP가 자동 생성한 신규 이력 `20261029085720` 한 건만 파일 버전으로 정렬했고 대상 이름/버전 1건·기존 MAF-1~3 이력 보존·함수 본문/권한 일치를 재조회했다. 재적용하지 않는다.
 - 기존 라이어·마피아 포함 로컬 162개, 타입·lint·build·Edge 7개 타입 통과. 수정 전 원격 smoke 42개와 수정 후 `tests/integration/mafia-leave-remote.mjs` 70개 통과. 동시 HTTP 퇴장/밤 행동, 중복 퇴장, 탈락자/관전자 허용, 라이어 활성 판 퇴장 거부를 확인했다. 상세는 `docs/MAFIA_LEAVE_VALIDATION.md`.
 - 새 테스트 방 2개 모두 종료, 열린 테스트 방 0개. 종료 방 2개는 기존 Cron 정리 대기이며 UUID-only 원장은 `.cache/mafia-leave-remote-rooms.json`. 기존 Cron 1개·5초 active와 보안 advisor의 기존 비공개 RLS 무정책 INFO 19건만 확인했다. 키·토큰은 저장하지 않았다.
-- PR #11 검토 대기. main 병합·공개 배포는 하지 않았다. 아래는 원본 회수 시점까지의 과거 기록이다.
+- 병합 커밋 `c9ac821`의 Vercel 상태는 success다. Preview는 `https://party-game-git-codex-mafia-mvp-audwns1322.vercel.app`이며 Vercel 로그인 보호로 이동한다. 현재 브라우저에 로그인 세션이 없어 배포 UI와 개발 DB 연결은 미검증이다. 보호를 해제하지 않았다. Vercel 연결을 제안했으나 설치/인증 완료는 미확인이다. 다음 작업은 로그인/연결 후 이 Preview의 방 생성·마피아 설정 화면을 확인하는 것이다. main 병합·Production 배포는 하지 않았다. 아래는 원본 회수 시점까지의 과거 기록이다.
 
 ## 원본 회수 시점의 MAF 기록 (2026-10-29, 과거 기록)
 - MAF-3 로컬 구현: `20261029140000_mafia_night.sql`, 자기소개→첫날 밤, 마피아 공격 과반수·경찰 조사·의사 보호(자기 보호 허용)·스파이 직업 조사·기자 공개·배신자 지정 대상 탈락 시 실제 마피아 전향, 전원 행동 완료 시 서버 결과 확정. 탈락자 공개는 정확한 직업이 아닌 시민/마피아 팀. 스파이는 마피아를 알지만 마피아는 스파이를 모름. 최초 역할은 DB에 별도 보존.

@@ -9,7 +9,7 @@ begin
   if not exists (
     select 1 from pg_proc
     where oid = to_regprocedure('app_private.room_command(text,uuid,text,jsonb,integer)')
-      and md5(prosrc) in ('aa5a1e87c9b7fb25a20e926129d2aa8d', 'e294f66adb900542b436c003213a7128')
+      and md5(regexp_replace(replace(prosrc, E'\r\n', E'\n'), E'[ \t]+\n', E'\n', 'g')) in ('3358d1c802ac286976c7b081907217e8', 'b297261652edcbafe2e4fa53bcdfc382')
   ) then raise exception 'room_command changed: review before applying'; end if;
 end;
 $preflight$;
@@ -71,7 +71,7 @@ begin
         and v_settings ->> 'discussion_seconds' in ('0', '60', '120', '180', '300')) then
       raise exception 'INVALID_SETTINGS' using errcode = 'P0001';
     end if;
-    
+
     if (jsonb_typeof(v_settings->'word_mode')='string' and v_settings->>'word_mode' in ('builtin','custom')
       and jsonb_typeof(v_settings->'hint_rounds')='number' and v_settings->>'hint_rounds' in ('1','2','3')
       and jsonb_typeof(v_settings->'discussion_seconds')='number' and v_settings->>'discussion_seconds' in ('0','60','120','180','300')
@@ -117,4 +117,4 @@ begin
   end if;
   return jsonb_build_object('version', app_private.bump(p_room), 'changed', true);
 end;
-$function$
+$function$;

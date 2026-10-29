@@ -4,8 +4,8 @@
 - main은 라이어 M6 PR #9 병합 `e0a2f67`. 재참가 오류 수정은 별도 초안 PR #10이다. 이 작업은 main 기준 `codex/mafia-leave-guard`이며 PR #10의 코드와 분리했다.
 - 개발 DB `wmgpshtqqsqwgyigxcwl`에는 MAF-1 `20261029090000_mafia_lobby`, MAF-2 `20261029110000_mafia_assignment`, MAF-3 `20261029140000_mafia_night`가 모두 적용되어 있다. room-command v8. GitHub의 마피아 브랜치/원본 migration·프런트엔드·테스트 부재와 DB 미적용을 혼동하지 않는다. 기존 migration 재실행 금지.
 - 배포 소스로 경찰의 NIGHT 중 퇴장 후 생존 상태가 남는 버그를 로컬에서 재현했다. 생존 참가자의 진행 중 퇴장을 기존 방 행 잠금 안에서 ROUND_ACTIVE로 거부하는 최소 수정안을 준비했다.
-- 수정 SQL은 `supabase/pending/mafia_leave_guard.sql`에만 있으며 원격 미적용이다. 자동 migration 목록에는 누락된 선행 MAF migration을 복구한 뒤 넣는다. 데이터 없는 회수 fixture와 테스트 17개를 추가했다.
-- 기존 라이어 포함 총 155개, 타입·lint·build 통과. 실제 다중 연결 동시성/원격 인수는 미실행. 상세와 적용 범위는 `docs/MAFIA_LEAVE_VALIDATION.md`.
+- 수정 SQL은 `supabase/pending/mafia_leave_guard.sql`에만 있으며 원격 미적용이다. 자동 migration 목록에는 누락된 선행 MAF migration을 복구한 뒤 넣는다. 데이터 없는 회수 fixture와 테스트 18개를 추가했다.
+- 기존 라이어 포함 총 156개, 타입·lint·build 통과. 실제 다중 연결 동시성/원격 인수는 미실행. 상세와 적용 범위는 `docs/MAFIA_LEAVE_VALIDATION.md`.
 - 다음 단계는 PR 검토와 원본 migration 복구다. 개발 DB 이력·배포 함수 재확인 및 승인 전 DB 변경·main 병합·공개 배포를 하지 않는다. 아래는 이전 M6 작업의 기록이다.
 
 ## 공개/로컬 상태

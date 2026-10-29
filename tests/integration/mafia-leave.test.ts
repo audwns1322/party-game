@@ -193,3 +193,11 @@ it('refuses to overwrite an independently changed room command', async () => {
   await db.exec(original.replace('begin', 'begin\n -- independently changed implementation'));
   await rejectsPatch('room_command changed: review before applying');
 });
+
+it('accepts equivalent CRLF formatting without weakening the source drift check', async () => {
+  await db.exec(original.replace(/\n/g, '\r\n'));
+  await db.exec(patch);
+  const players = await room();
+  await round(players);
+  expect((await leave(players[1])).status).toBe(409);
+});

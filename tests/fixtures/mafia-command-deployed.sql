@@ -97,7 +97,7 @@ begin
         and v_settings ->> 'discussion_seconds' in ('0', '60', '120', '180', '300')) then
       raise exception 'INVALID_SETTINGS' using errcode = 'P0001';
     end if;
-    
+
     if (jsonb_typeof(v_settings->'word_mode')='string' and v_settings->>'word_mode' in ('builtin','custom')
       and jsonb_typeof(v_settings->'hint_rounds')='number' and v_settings->>'hint_rounds' in ('1','2','3')
       and jsonb_typeof(v_settings->'discussion_seconds')='number' and v_settings->>'discussion_seconds' in ('0','60','120','180','300')

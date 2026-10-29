@@ -1,4 +1,11 @@
-# HANDOFF (2026-10-28)
+# HANDOFF (2026-10-29)
+
+## 현재 점검 작업
+- 최신 원격 main은 PR #9 병합 `e0a2f67`. 새 체크아웃 `work/party-game`의 `codex/fix-room-rejoin`에서 재참가 오류를 수정했으며 아래 M6 기록은 이전 작업 환경 기준이다.
+- 원격 전체 브랜치와 로컬 객체 확인 결과 `codex/mafia-mvp`, `57d2e5a`, MAF-3 migration이 없다. 마피아 구현 검토는 이전 환경의 원본 복구가 필요하다. 복구 전 새 구현/덮어쓰기를 하지 않는다.
+- 권한 상실 화면의 재참가 버튼이 같은 SPA 경로로 이동해 세션/오류 상태가 남는 문제를 문서 내비게이션 링크로 수정했다. 기존 세션 삭제 후 앱이 다시 초기화되어 참가 화면으로 이동한다.
+- 재참가 UI 회귀 2개 추가. 단위+SQL/핸들러 총 140개, TypeScript, lint, Vite build, Edge 7개 타입 검사 통과. 실제 브라우저에서 로컬 모의 API의 403 응답 후 재참가 링크를 눌러 같은 방의 닉네임 입력 화면으로 전환됨을 확인했다. 실제 DB 인수 테스트는 아니다.
+- 기존 node_modules와 Deno 캐시를 재사용했다. 기존 체크아웃/stash는 보존. 재참가 수정은 PR 검토 대상으로 정리하며 DB 변경·원격 DB 테스트·main 병합·공개 배포는 하지 않는다.
 
 ## 공개/로컬 상태
 - main의 M5 기준은 PR #8 merge `264bc3c`. 현재 작업 `codex/m6-resilience`, PR #9 `https://github.com/audwns1322/party-game/pull/9`: M6 끊김 정지/복귀·방장 위임·예약 정리까지 구현·원격·데스크톱 검증 완료. main 통합과 공개 배포는 이 PR에서 관리한다. 최신 병합/배포 상태는 GitHub/Vercel 확인.

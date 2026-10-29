@@ -70,7 +70,7 @@ export function Lobby({ session }: { session: StoredSession }) {
       <main>
         <h1>{closed ? '종료된 방이에요' : '이 방에 접속할 수 없어요'}</h1>
         <p>{messageFor(fatal)}</p>
-        {!closed && <button className="primary" onClick={() => navigate(`/room/${session.code}`)}>이 방에 다시 참가하기</button>}
+        {!closed && <a className="primary" href={`/room/${session.code}`}>이 방에 다시 참가하기</a>}
         <button onClick={() => navigate('/')}>처음으로</button>
       </main>
     );

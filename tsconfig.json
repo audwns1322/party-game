@@ -25,7 +25,8 @@
     "vite.config.ts",
     "tests/integration/db.test.ts",
     "tests/integration/room.test.ts",
-    "tests/integration/game.test.ts"
+    "tests/integration/game.test.ts",
+    "tests/integration/mafia-leave.test.ts"
   ],
   "exclude": [
     "supabase/functions/_shared/server.ts"

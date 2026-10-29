@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {RoundPanel} from '../../src/features/room/RoundPanel';
 import type {RoomSnapshot} from '../../src/lib/api';
 const fixture=():RoomSnapshot=>({
- server_now:'2026-10-28T09:00:00Z',room:{id:'r',code:'123456',status:'open',version:2,host_player_id:'host',settings:{word_mode:'builtin',hint_rounds:1,discussion_seconds:60},locked:false,expires_at:'2026-10-28T11:00:00Z'},
+ server_now:'2026-10-28T09:00:00Z',room:{id:'r',code:'123456',status:'open',version:2,host_player_id:'host',game_type:'liar',settings:{word_mode:'builtin',hint_rounds:1,discussion_seconds:60},locked:false,expires_at:'2026-10-28T11:00:00Z'},
  me:{player_id:'host',is_host:true},players:[{id:'guest',nickname:'끊긴참가자',join_order:2,status:'active',wins:0,connected:false}],
  round:{id:'round',phase:'PAUSED_DISCONNECT',version:2,participant_ids:['host','guest'],submitted_count:0,acknowledged_count:2,hint_index:0,hint_round:1,hint_rounds:1,current_player_id:null,deadline_at:null,remaining_ms:null,paused_phase:null,
   me:{submitted:false,acknowledged:true,role:'citizen',word:'숨긴제시어'},disconnect:{original_phase:'APPEAL_VOTE',remaining_ms:15000,grace_until:'2026-10-28T09:00:30Z',missing_ids:['guest']}}

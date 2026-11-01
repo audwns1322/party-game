@@ -1,5 +1,8 @@
 # HANDOFF (2026-10-28)
 
+## 라이어 혼선 모드 역할 표시 수정 (2026-11-01)
+- `main` M6 기준 별도 `codex/liar-confusion-role-display` 브랜치에서 혼선 모드 개인 역할 카드가 실제 라이어에게도 `당신은 시민입니다`로 표시되게 변경. 라이어만 보던 다른 제시어 안내는 숨기고, 일반 모드/서버 실제 역할·승리 판정은 유지. 단위 27개, lint·빌드 통과. 서버 DTO의 실제 역할값은 변경하지 않았으며 공개 배포·main 병합은 사용자 승인 대기.
+
 ## 공개/로컬 상태
 - main의 M5 기준은 PR #8 merge `264bc3c`. 현재 작업 `codex/m6-resilience`, PR #9 `https://github.com/audwns1322/party-game/pull/9`: M6 끊김 정지/복귀·방장 위임·예약 정리까지 구현·원격·데스크톱 검증 완료. main 통합과 공개 배포는 이 PR에서 관리한다. 최신 병합/배포 상태는 GitHub/Vercel 확인.
 - 개발 DB는 M6 `20261028091227_m6_resilience`까지 적용, game-command v6·player-recover v4 배포 완료. 공개 사이트 `https://party-game-psi-pink.vercel.app`.

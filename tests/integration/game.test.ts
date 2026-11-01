@@ -35,6 +35,23 @@ beforeAll(async()=>{
 afterAll(async()=>{ await db.close(); });
 
 describe('M2 assignment and secrecy',()=>{
+  it('randomizes liar speaking positions across early and late turns',async()=>{
+    const players=await room(6);const host=players[0];
+    for(const liarCount of [1,2]){
+      expect((await api.room(request({room_id:host.room_id,action:'update_settings',payload:{liar_count:liarCount},expected_version:(await snapshot(host)).room.version,request_id:randomUUID()},host.token))).status).toBe(200);
+      const positions=new Set<number>();
+      for(let attempt=0;attempt<30;attempt++){
+        expect((await game(host,'start_round')).status).toBe(200);
+        const round=(await snapshot(host)).round!;
+        const {rows}=await db.query<{turn_order:number}>('select turn_order from app_private.round_players where round_id=$1 and role=\'liar\'',[round.id]);
+        expect(rows).toHaveLength(liarCount);
+        for(const {turn_order} of rows)positions.add(turn_order);
+        expect((await game(host,'cancel_round')).status).toBe(200);
+      }
+      expect([...positions].some(position=>position<=3)).toBe(true);
+      expect([...positions].some(position=>position>=4)).toBe(true);
+    }
+  },120000);
   it.each([3,4,5,6,7,8,9,10,11,12,13,14,15])('assigns exactly one liar and freezes all %i participants',async count=>{
     const players=await room(count); const host=players[0];
     expect((await game(host,'start_round')).status).toBe(200);

@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import type { RoomSnapshot } from '../../lib/api';
 import { ResultPanel } from './ResultPanel';
 
+export function roleAnnouncement(mode: 'classic' | 'confusion' | undefined, role: 'liar' | 'citizen' | null) {
+  if (mode === 'confusion') return '당신은 시민입니다';
+  return role === 'liar' ? '당신은 라이어예요' : '당신은 시민이에요';
+}
+
 export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; busy: boolean; run: (action: string,payload?: object) => Promise<unknown> }) {
   const [word,setWord] = useState('');
   const [revealed,setRevealed] = useState(false);
@@ -71,9 +76,9 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
           onBlur={() => setRevealed(false)} onContextMenu={event => event.preventDefault()}
           onKeyDown={event => { if ([' ','Enter'].includes(event.key)) { event.preventDefault(); setRevealed(true); } }}
           onKeyUp={() => setRevealed(false)} aria-label="누르는 동안 내 역할 보기">누르고 역할 보기</button>
-        {revealed && <div className="secret-card"><strong>{round.me.role === 'liar' ? '당신은 라이어예요' : '당신은 시민이에요'}</strong>
+        {revealed && <div className="secret-card"><strong>{roleAnnouncement(round.game_mode, round.me.role)}</strong>
           <p>{round.me.word ? `내 제시어: ${round.me.word}` : '힌트를 듣고 제시어를 추리하세요.'}</p>
-          {round.me.role === 'liar' && round.me.word && <p>시민들은 다른 제시어를 받았어요.</p>}</div>}
+          {round.game_mode !== 'confusion' && round.me.role === 'liar' && round.me.word && <p>시민들은 다른 제시어를 받았어요.</p>}</div>}
         {round.phase === 'REVEAL_ROLE' && <>
           <p role="status">역할 확인 {round.acknowledged_count}/{round.participant_ids.length}명</p>
           <button className="primary" disabled={busy || round.me.acknowledged} onClick={() => void run('ack_role',{round_id:round.id})}>

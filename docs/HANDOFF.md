@@ -1,5 +1,9 @@
 # HANDOFF (2026-10-28)
 
+## 라이어 혼선 모드 역할 표시 수정 (2026-11-01)
+- `main` M6 기준 별도 `codex/liar-confusion-role-display` 브랜치에서 혼선 모드 개인 역할 카드가 실제 라이어에게도 `당신은 시민입니다`로 표시되게 변경. 라이어만 보던 다른 제시어 안내는 숨기고, 일반 모드/서버 실제 역할·승리 판정은 유지. 단위 27개, lint·빌드 통과. 서버 DTO의 실제 역할값은 변경하지 않았으며 공개 배포·main 병합은 사용자 승인 대기.
+- 발언 순서가 뒤쪽에 치우쳐 보인다는 제보로 배정 방식을 위치별 독립 난수 추첨으로 변경(`20261101102358_randomize_liar_turn_positions.sql`). 기존 6인 판의 라이어 기록은 9개 중 8개가 5·6번에 있었음. 1명/2명 설정 각각 30판 재배정 테스트에서 앞·뒤 순서 모두 확인, 전체 단위 27 + SQL/핸들러 113, lint·빌드 통과. 2026-11-01 개발 Supabase에 migration 적용 완료(원격 버전 `20261101102358`), `app_private.game_command_m2` 함수 정의에서 변경 확인. 다른 작업자의 `20261029140001_mafia_leave_guard`는 보존. 운영 DB·공개 배포·main 병합 미진행.
+
 ## 공개/로컬 상태
 - main의 M5 기준은 PR #8 merge `264bc3c`. 현재 작업 `codex/m6-resilience`, PR #9 `https://github.com/audwns1322/party-game/pull/9`: M6 끊김 정지/복귀·방장 위임·예약 정리까지 구현·원격·데스크톱 검증 완료. main 통합과 공개 배포는 이 PR에서 관리한다. 최신 병합/배포 상태는 GitHub/Vercel 확인.
 - 개발 DB는 M6 `20261028091227_m6_resilience`까지 적용, game-command v6·player-recover v4 배포 완료. 공개 사이트 `https://party-game-psi-pink.vercel.app`.

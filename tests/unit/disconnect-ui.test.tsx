@@ -1,6 +1,6 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {expect,it} from 'vitest';
-import {RoundPanel} from '../../src/features/room/RoundPanel';
+import {RoundPanel,roleAnnouncement} from '../../src/features/room/RoundPanel';
 import type {RoomSnapshot} from '../../src/lib/api';
 const fixture=():RoomSnapshot=>({
  server_now:'2026-10-28T09:00:00Z',room:{id:'r',code:'123456',status:'open',version:2,host_player_id:'host',settings:{word_mode:'builtin',hint_rounds:1,discussion_seconds:60},locked:false,expires_at:'2026-10-28T11:00:00Z'},
@@ -9,6 +9,12 @@ const fixture=():RoomSnapshot=>({
   me:{submitted:false,acknowledged:true,role:'citizen',word:'숨긴제시어'},disconnect:{original_phase:'APPEAL_VOTE',remaining_ms:15000,grace_until:'2026-10-28T09:00:30Z',missing_ids:['guest']}}
 });
 const render=(s:RoomSnapshot)=>renderToStaticMarkup(<RoundPanel snapshot={s} busy={false} run={async()=>undefined}/>);
+it('announces citizen to everyone in confusion mode without changing classic roles',()=>{
+ expect(roleAnnouncement('confusion','liar')).toBe('당신은 시민입니다');
+ expect(roleAnnouncement('confusion','citizen')).toBe('당신은 시민입니다');
+ expect(roleAnnouncement('classic','liar')).toBe('당신은 라이어예요');
+ expect(roleAnnouncement('classic','citizen')).toBe('당신은 시민이에요');
+});
 it('freezes controls during grace and never renders the private word by default',()=>{
  const html=render(fixture());expect(html).toContain('끊긴참가자');expect(html).toContain('복귀 유예 30초');expect(html).toContain('게임에 남은 시간 15초');expect(html).not.toContain('숨긴제시어');expect(html).not.toContain('30초 더 기다리기');expect(html).toMatch(/disabled=""[^>]*>현재 판 취소/);
 });

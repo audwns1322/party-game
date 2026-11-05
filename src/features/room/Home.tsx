@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { api, apiConfigured, messageFor, type Issued } from '../../lib/api';
+import { api, apiConfigured, messageFor, type GameType, type Issued } from '../../lib/api';
 import { navigate } from '../../lib/router';
 import { listSessions, saveSession } from '../../lib/session';
 
@@ -10,6 +10,7 @@ export function extractCode(text: string): string {
 
 export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string) => void }) {
   const [mode, setMode] = useState<'create' | 'join'>('create');
+  const [gameType, setGameType] = useState<GameType>('liar');
   const [nickname, setNickname] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -25,7 +26,7 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
     if (mode === 'join' && rooms.some((r) => r.code === code)) { navigate(`/room/${code}`); return; }
     setBusy(true);
     try {
-      const issued = mode === 'create' ? await api.create(nickname) : await api.join(code, nickname);
+      const issued = mode === 'create' ? await api.create(nickname, gameType) : await api.join(code, nickname);
       saveSession({ ...issued, nickname });
       onIssued(issued, nickname);
       navigate(`/room/${issued.code}`);
@@ -34,9 +35,9 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
 
   return (
     <main>
-      <span className="badge">PARTY GAME · LIAR</span>
+      <span className="badge">PARTY GAME</span>
       <h1>함께 모여,<br />시작하는 즐거움</h1>
-      <p>계정 없이 함께하는 3~15인 라이어 게임</p>
+      <p>계정 없이 함께하는 3~15인 파티 게임</p>
       {!apiConfigured && <p role="alert" className="error">서버 설정(.env.local)이 없어요.</p>}
 
       {rooms.length > 0 && (
@@ -56,6 +57,17 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         <button type="button" role="tab" id="tab-join" aria-controls="start-panel" aria-selected={mode === 'join'} tabIndex={mode === 'join' ? 0 : -1} onClick={() => { setMode('join'); setError(''); }}>참가하기</button>
       </div>
       <form id="start-panel" role="tabpanel" aria-labelledby={mode === 'create' ? 'tab-create' : 'tab-join'} onSubmit={submit} className="card" noValidate>
+        {mode === 'create' && <fieldset className="game-picker">
+          <legend>게임 종류 선택</legend>
+          <div className="game-options">
+            <button type="button" className={gameType==='liar'?'game-option selected':'game-option'} aria-pressed={gameType==='liar'} onClick={()=>setGameType('liar')}>
+              <span aria-hidden="true">🕵️</span><strong>라이어 게임</strong><small>정식 운영</small>
+            </button>
+            <button type="button" className={gameType==='mafia'?'game-option selected':'game-option'} aria-pressed={gameType==='mafia'} onClick={()=>setGameType('mafia')}>
+              <span aria-hidden="true">🌙</span><strong>마피아 게임</strong><small>베타 · 연결 복구 개발 중</small>
+            </button>
+          </div>
+        </fieldset>}
         {mode === 'join' && (
           <label>방 코드
             <input inputMode="numeric" autoComplete="off" value={code}
@@ -68,6 +80,12 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         {error && <p role="alert" className="error">{error}</p>}
         <button className="primary" disabled={busy}>{busy ? '잠시만요…' : mode === 'create' ? '방 만들기' : '참가하기'}</button>
       </form>
+      <details className="card">
+        <summary>홈 화면에 앱처럼 설치하기</summary>
+        <p>아이폰: Safari에서 공유 → 홈 화면에 추가</p>
+        <p>안드로이드: Chrome 메뉴 → 앱 설치 또는 홈 화면에 추가</p>
+        <p className="hint">게임 진행에는 인터넷 연결이 필요합니다.</p>
+      </details>
     </main>
   );
 }

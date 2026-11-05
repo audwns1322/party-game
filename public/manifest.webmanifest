@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "모두의 파티",
+  "short_name": "Party Game",
+  "description": "모여서 각자의 휴대폰으로 즐기는 파티 게임",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#11101d",
+  "theme_color": "#11101d",
+  "icons": [
+    { "src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -45,6 +45,7 @@ describe('database permissions', () => {
         await expect(db.query('select * from app_private.players')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_round_players')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_night_actions')).rejects.toThrow(/permission denied/);
+        await expect(db.query('select * from app_private.mafia_day_votes')).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_create('닉네임', '닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_join('000000', '닉네임', '닉네임', repeat('a',64), repeat('b',64))")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.player_recover('000000', repeat('a',64), repeat('b',64), repeat('c',64))")).rejects.toThrow(/permission denied/);
@@ -53,7 +54,7 @@ describe('database permissions', () => {
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(18);
+    expect(rows[0].n).toBe(19);
   });
 });
 

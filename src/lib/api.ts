@@ -42,12 +42,14 @@ export type RoomSnapshot = {
   me: { player_id: string; is_host: boolean };
   players: Player[];
   round?: RoundSnapshot | null;
-  mafia?: { id:string; phase:'REVEAL_ROLE'|'INTRO'|'NIGHT'|'DAY_DISCUSS'|'FINAL_RESULT'; participant_ids:string[]; acknowledged_count:number;
+  mafia?: { id:string; phase:'REVEAL_ROLE'|'INTRO'|'NIGHT'|'DAY_DISCUSS'|'DAY_VOTE'|'DAY_RUNOFF'|'DAY_RESULT'|'FINAL_RESULT'; participant_ids:string[]; acknowledged_count:number;
     night_no?:number;alive_ids?:string[];night_expected_count?:number;night_submitted_count?:number;
     night_result?:{eliminated_player_id:string|null;eliminated_team:'mafia'|'citizen'|null;journalist:{player_id:string;role:MafiaRole}|null}|null;
+    day_no?:number;day_result?:{eliminated_player_id?:string|null;eliminated_team?:'mafia'|'citizen'|null;runoff_ids?:string[];runoff?:boolean}|null;
+    vote_submitted_count?:number;
     winner?:'mafia'|'citizen'|null;
     me:{role:MafiaRole;original_role?:MafiaRole;acknowledged:boolean;teammate_ids:string[];alive?:boolean;
-      mission_target_id?:string|null;night_submitted?:boolean;
+      mission_target_id?:string|null;night_submitted?:boolean;day_voted?:boolean;
       investigation?:{target_id:string;result:MafiaRole|'not_mafia'}|null} | null } | null;
 };
 export class ApiError extends Error {

@@ -38,7 +38,7 @@ function MafiaNightPanel({mafia,players,meId,act,busy}: {mafia:MafiaView;players
   const active=new Set(mafia.alive_ids??[]);
   const actionable=own && own.alive && ['mafia','police','doctor','spy','journalist'].includes(own.role);
   return <section className="card" aria-labelledby="mafia-night">
-    <h2 id="mafia-night">첫 번째 밤</h2>
+    <h2 id="mafia-night">{mafia.night_no ?? 1}번째 밤</h2>
     <p>행동 제출 {mafia.night_submitted_count??0}/{mafia.night_expected_count??0}명 · 모든 행동이 완료되면 아침이 됩니다.</p>
     {!actionable ? <p className="hint">오늘 밤은 별도 행동이 없어요. 다른 참가자를 기다려 주세요.</p> : own.night_submitted ? <p>밤 행동을 제출했어요. 결과를 기다려 주세요.</p> : !open ?
       <button onClick={()=>setOpen(true)}>내 비밀 행동 보기</button> : <>
@@ -56,16 +56,32 @@ function MafiaNightPanel({mafia,players,meId,act,busy}: {mafia:MafiaView;players
   </section>;
 }
 
-function MafiaDayPanel({mafia,players}: {mafia:MafiaView;players:Player[]}) {
+function MafiaDayPanel({mafia,players,meId,isHost,act,busy}: {mafia:MafiaView;players:Player[];meId:string;isHost:boolean;act:(action:string,payload?:object)=>Promise<boolean>;busy:boolean}) {
   const [showSecret,setShowSecret]=useState(false);
+  const [target,setTarget]=useState('');
   const result=mafia.night_result;
   const name=(id:string|null|undefined)=>players.find(p=>p.id===id)?.nickname??'참가자';
+  const voting=mafia.phase==='DAY_VOTE'||mafia.phase==='DAY_RUNOFF';
+  const candidates=(mafia.phase==='DAY_RUNOFF' ? mafia.day_result?.runoff_ids : mafia.alive_ids)??[];
+  const canVote=voting && mafia.me?.alive && !mafia.me.day_voted;
   return <section className="card">
-    <h2>{mafia.phase==='FINAL_RESULT'?'게임 결과':'아침이 밝았습니다'}</h2>
-    <p>{result?.eliminated_player_id?`${name(result.eliminated_player_id)} 님 탈락 · ${result.eliminated_team==='mafia'?'마피아 팀':'시민 팀'}`:'밤에 탈락한 사람이 없어요.'}</p>
-    {result?.journalist && <p>기자 발표: {name(result.journalist.player_id)} 님의 직업은 {ROLE_NAMES[result.journalist.role]}입니다.</p>}
+    <h2>{mafia.phase==='FINAL_RESULT'?'게임 결과':voting?'낮 비밀 투표':mafia.phase==='DAY_RESULT'?'낮 투표 결과':'아침이 밝았습니다'}</h2>
+    {['DAY_DISCUSS','DAY_VOTE','DAY_RUNOFF'].includes(mafia.phase) && <p>{result?.eliminated_player_id?`${name(result.eliminated_player_id)} 님 탈락 · ${result.eliminated_team==='mafia'?'마피아 팀':'시민 팀'}`:'밤에 탈락한 사람이 없어요.'}</p>}
+    {['DAY_DISCUSS','DAY_VOTE','DAY_RUNOFF'].includes(mafia.phase) && result?.journalist && <p>기자 발표: {name(result.journalist.player_id)} 님의 직업은 {ROLE_NAMES[result.journalist.role]}입니다.</p>}
+    {['DAY_RESULT','FINAL_RESULT'].includes(mafia.phase) && mafia.day_result && <p>{mafia.day_result.eliminated_player_id?`${name(mafia.day_result.eliminated_player_id)} 님 투표 탈락 · ${mafia.day_result.eliminated_team==='mafia'?'마피아 팀':'시민 팀'}`:'재투표 동률 · 이번 낮에는 탈락자가 없어요.'}</p>}
     {mafia.winner && <p><strong>{mafia.winner==='mafia'?'마피아 팀':'시민 팀'} 승리!</strong></p>}
-    {mafia.phase==='DAY_DISCUSS' && <p>낮 토론을 진행하세요. 투표는 다음 개발 단계에서 제공돼요.</p>}
+    {mafia.phase==='DAY_DISCUSS' && <><p>생존자끼리 토론하세요. 첫날 밤 이후부터 투표합니다.</p>{isHost && <button className="primary" disabled={busy} onClick={()=>void act('mafia_day_start_vote')}>토론 종료 · 비밀 투표 시작</button>}</>}
+    {voting && <><p>투표 완료 {mafia.vote_submitted_count??0}/{mafia.alive_ids?.length??0}명 · {mafia.phase==='DAY_RUNOFF'?'동률 후보 재투표(마지막)':'생존자 전원 투표'}</p>
+      {!mafia.me?.alive ? <p>탈락자는 투표할 수 없어요.</p> : !canVote ? <p>투표를 제출했어요. 다른 참가자를 기다려 주세요.</p> : <>
+        <label>탈락시킬 참가자
+          <select value={target} onChange={e=>setTarget(e.target.value)}><option value="">선택해 주세요</option>
+            {players.filter(p=>candidates.includes(p.id)&&p.id!==meId).map(p=><option key={p.id} value={p.id}>{p.nickname}</option>)}
+          </select>
+        </label>
+        <button className="primary" disabled={busy||!target} onClick={()=>void act('mafia_day_vote',{target_id:target})}>비밀 투표 제출</button>
+      </>}
+    </>}
+    {mafia.phase==='DAY_RESULT' && isHost && <button className="primary" disabled={busy} onClick={()=>void act('mafia_day_next_night')}>결과 확인 · 다음 밤 시작</button>}
     {showSecret && mafia.me?.investigation && <p>내 조사 결과: {name(mafia.me.investigation.target_id)} 님 · {mafia.me.investigation.result==='mafia'?'마피아':mafia.me.investigation.result==='not_mafia'?'마피아 아님':ROLE_NAMES[mafia.me.investigation.result]}</p>}
     {showSecret && mafia.me?.original_role==='traitor' && <p>{mafia.me.role==='mafia'?'비밀 미션 성공 · 마피아로 전향했어요.':'비밀 미션은 아직 완료되지 않았어요.'}</p>}
     {(mafia.me?.investigation || mafia.me?.original_role==='traitor') && <button onClick={()=>setShowSecret(v=>!v)}>{showSecret?'비밀 결과 숨기기':'내 비밀 결과 보기'}</button>}
@@ -225,7 +241,7 @@ export function Lobby({ session }: { session: StoredSession }) {
       {notice && <p role="status" className="notice">{notice}</p>}
       {room.game_type === 'mafia' ? snapshot.mafia ? snapshot.mafia.phase==='NIGHT' ?
         <MafiaNightPanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} meId={me.player_id} act={act} busy={busy}/> :
-        ['DAY_DISCUSS','FINAL_RESULT'].includes(snapshot.mafia.phase) ? <MafiaDayPanel mafia={snapshot.mafia} players={players}/> :
+        ['DAY_DISCUSS','DAY_VOTE','DAY_RUNOFF','DAY_RESULT','FINAL_RESULT'].includes(snapshot.mafia.phase) ? <MafiaDayPanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} meId={me.player_id} isHost={isHost} act={act} busy={busy}/> :
         <MafiaRolePanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} act={act} busy={busy} isHost={isHost}/> : isHost ?
         <button className="primary" disabled={busy || !online || players.length<4 || players.length!==Object.values(room.settings.mafia_roles??{}).reduce((a,b)=>a+b,0) || players.some(p=>!p.connected)} onClick={()=>void act('mafia_start')}>
           {players.length<4?'4명 이상 모이면 시작할 수 있어요':'게임 시작 · 비밀 역할 배정'}

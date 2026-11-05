@@ -47,9 +47,10 @@ export type RoomSnapshot = {
     night_result?:{eliminated_player_id:string|null;eliminated_team:'mafia'|'citizen'|null;journalist:{player_id:string;role:MafiaRole}|null}|null;
     day_no?:number;day_result?:{eliminated_player_id?:string|null;eliminated_team?:'mafia'|'citizen'|null;runoff_ids?:string[];runoff?:boolean}|null;
     vote_submitted_count?:number;
+    final_roles?:{player_id:string;role:MafiaRole;original_role:MafiaRole}[]|null;
     winner?:'mafia'|'citizen'|null;
     me:{role:MafiaRole;original_role?:MafiaRole;acknowledged:boolean;teammate_ids:string[];alive?:boolean;
-      mission_target_id?:string|null;night_submitted?:boolean;day_voted?:boolean;
+      mission_target_id?:string|null;night_submitted?:boolean;day_voted?:boolean;journalist_used?:boolean;
       investigation?:{target_id:string;result:MafiaRole|'not_mafia'}|null} | null } | null;
 };
 export class ApiError extends Error {
@@ -114,6 +115,7 @@ const MESSAGES: Record<string, string> = {
   ALREADY_SUBMITTED: '이미 단어를 제출했어요.',
   ALREADY_ACKNOWLEDGED: '이미 역할을 확인했어요.',
   ALREADY_VOTED: '이미 투표했어요. 제출한 표는 바꿀 수 없어요.',
+  JOURNALIST_USED: '기자 취재는 게임당 한 번만 할 수 있어요.',
   INVALID_TARGET: '본인을 제외한 이번 투표의 후보를 선택해 주세요.',
   INVALID_GUESS: '정답은 보이는 글자 1~60자로 입력해 주세요.',
   NOT_GUESSER: '지목된 라이어만 정답 도전을 할 수 있어요.',

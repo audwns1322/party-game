@@ -15,6 +15,7 @@ const KNOWN: Record<string, number> = {
   REQUEST_CONFLICT: 409, ALREADY_SUBMITTED: 409, ALREADY_ACKNOWLEDGED: 409,
   NOT_ROUND_PLAYER: 403, INVALID_WORD: 400, NOT_YOUR_TURN: 403, DISCUSSION_NOT_OVER: 409, DISCUSSION_OVER: 409,
   INVALID_TARGET: 400, ALREADY_VOTED: 409,
+  JOURNALIST_USED: 409,
   INVALID_GUESS: 400, NOT_GUESSER: 403, CITIZEN_ONLY: 403, ALREADY_APPEAL_VOTED: 409,
   ROUND_PAUSED: 409, RECONNECT_GRACE: 409,
 };
@@ -187,7 +188,7 @@ export function snapshotRoomHandler(rpc: Rpc, broadcast?: Broadcast) {
     return reply(200, dto);
   });
 }
-const ACTIONS = new Set(['heartbeat', 'update_settings', 'lock', 'kick', 'leave', 'close_room', 'mafia_start', 'mafia_ack', 'mafia_intro_done', 'mafia_night_action', 'mafia_day_start_vote', 'mafia_day_vote', 'mafia_day_next_night']);
+const ACTIONS = new Set(['heartbeat', 'update_settings', 'lock', 'kick', 'leave', 'close_room', 'mafia_start', 'mafia_ack', 'mafia_intro_done', 'mafia_night_action', 'mafia_day_start_vote', 'mafia_day_vote', 'mafia_day_next_night', 'mafia_finish']);
 const MAX_INT = 2147483647;
 export function commandHandler(rpc: Rpc, broadcast: Broadcast) {
   return guard(async (request) => {

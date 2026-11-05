@@ -71,3 +71,29 @@ it('runs one tied-ballot runoff and advances to the next night without a second 
   await command(0,'mafia_day_next_night');
   expect((await phase()).phase).toBe('NIGHT');
 });
+
+it('reveals everyone only on final result and returns to lobby under host authority',async()=>{
+  const before=(await db.query<{value:{mafia:{final_roles:null}}}>('select app_private.room_dto($1,$2) value',[roomId,seats[1].id])).rows[0].value;
+  expect(before.mafia.final_roles).toBeNull();
+  await db.query("update app_private.mafia_rounds set phase='FINAL_RESULT',winner='citizen' where id=$1",[roundId]);
+  const final=(await db.query<{value:{mafia:{final_roles:{role:string}[]}}}>('select app_private.room_dto($1,$2) value',[roomId,seats[1].id])).rows[0].value;
+  expect(final.mafia.final_roles.map(p=>p.role)).toEqual(['mafia','citizen','citizen','citizen']);
+  await rejected(1,'mafia_finish',{},/HOST_ONLY/);
+  await command(0,'mafia_finish');
+  const lobby=(await db.query<{value:{mafia?:unknown;room:{locked:boolean}}}>('select app_private.room_dto($1,$2) value',[roomId,seats[0].id])).rows[0].value;
+  expect(lobby.mafia).toBeUndefined();
+  expect(lobby.room.locked).toBe(false);
+  await rejected(0,'mafia_finish',{},/PHASE_CONFLICT/);
+});
+
+it('allows a journalist to skip later nights but never investigate twice',async()=>{
+  await db.query("update app_private.mafia_round_players set role='journalist',original_role='journalist' where round_id=$1 and player_id=$2",[roundId,seats[2].id]);
+  const insert=(night:number,target:string|null)=>db.query('insert into app_private.mafia_night_actions(round_id,night_no,actor_id,kind,target_id) values($1,$2,$3,$4,$5)',[roundId,night,seats[2].id,'journalist',target]);
+  await insert(1,seats[1].id);
+  await db.exec('savepoint duplicate_investigation;');
+  try { await expect(insert(2,seats[3].id)).rejects.toThrow(/JOURNALIST_USED/); }
+  finally { await db.exec('rollback to savepoint duplicate_investigation; release savepoint duplicate_investigation;'); }
+  await insert(2,null);
+  const dto=(await db.query<{value:{mafia:{me:{journalist_used:boolean}}}}> ('select app_private.room_dto($1,$2) value',[roomId,seats[2].id])).rows[0].value;
+  expect(dto.mafia.me.journalist_used).toBe(true);
+});

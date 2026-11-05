@@ -43,14 +43,14 @@ function MafiaNightPanel({mafia,players,meId,act,busy}: {mafia:MafiaView;players
     {!actionable ? <p className="hint">오늘 밤은 별도 행동이 없어요. 다른 참가자를 기다려 주세요.</p> : own.night_submitted ? <p>밤 행동을 제출했어요. 결과를 기다려 주세요.</p> : !open ?
       <button onClick={()=>setOpen(true)}>내 비밀 행동 보기</button> : <>
       <p><strong>{ROLE_NAMES[own.role]}</strong>의 밤 행동을 선택해 주세요.</p>
-      <label>대상 선택
+      {!(own.role==='journalist' && own.journalist_used) && <label>대상 선택
         <select value={target} onChange={e=>setTarget(e.target.value)}>
           <option value="">대상을 선택해 주세요</option>
           {players.filter(p=>active.has(p.id)&&(p.id!==meId||own.role==='doctor')).map(p=><option key={p.id} value={p.id}>{p.nickname}{p.id===meId?' (나)':''}</option>)}
         </select>
-      </label>
-      {own.role==='journalist' && <p className="hint">기자는 게임당 한 번만 취재할 수 있어요. 오늘 사용하지 않아도 됩니다.</p>}
-      <button className="primary" disabled={busy||(!target&&own.role!=='journalist')} onClick={()=>{setOpen(false);void act('mafia_night_action',{target_id:target||null});}}>비밀 행동 제출{!target?' · 오늘 건너뛰기':''}</button>
+      </label>}
+      {own.role==='journalist' && <p className="hint">{own.journalist_used?'이미 취재를 사용했어요. 오늘은 행동 완료만 제출하세요.':'기자는 게임당 한 번만 취재할 수 있어요. 오늘 사용하지 않아도 됩니다.'}</p>}
+      <button className="primary" disabled={busy||(!target&&own.role!=='journalist')} onClick={()=>{setOpen(false);void act('mafia_night_action',{target_id:own.role==='journalist'&&own.journalist_used?null:target||null});}}>비밀 행동 제출{!target||own.journalist_used?' · 오늘 건너뛰기':''}</button>
       <button type="button" onClick={()=>setOpen(false)}>행동 숨기기</button>
     </>}
   </section>;
@@ -70,6 +70,11 @@ function MafiaDayPanel({mafia,players,meId,isHost,act,busy}: {mafia:MafiaView;pl
     {['DAY_DISCUSS','DAY_VOTE','DAY_RUNOFF'].includes(mafia.phase) && result?.journalist && <p>기자 발표: {name(result.journalist.player_id)} 님의 직업은 {ROLE_NAMES[result.journalist.role]}입니다.</p>}
     {['DAY_RESULT','FINAL_RESULT'].includes(mafia.phase) && mafia.day_result && <p>{mafia.day_result.eliminated_player_id?`${name(mafia.day_result.eliminated_player_id)} 님 투표 탈락 · ${mafia.day_result.eliminated_team==='mafia'?'마피아 팀':'시민 팀'}`:'재투표 동률 · 이번 낮에는 탈락자가 없어요.'}</p>}
     {mafia.winner && <p><strong>{mafia.winner==='mafia'?'마피아 팀':'시민 팀'} 승리!</strong></p>}
+    {mafia.phase==='FINAL_RESULT' && mafia.final_roles && <div>
+      <h3>전체 직업 공개</h3>
+      <ul>{mafia.final_roles.map(p=><li key={p.player_id}>{name(p.player_id)} · {ROLE_NAMES[p.role]}{p.original_role!==p.role?` (최초 ${ROLE_NAMES[p.original_role]})`:''}</li>)}</ul>
+    </div>}
+    {mafia.phase==='FINAL_RESULT' && isHost && <button className="primary" disabled={busy} onClick={()=>void act('mafia_finish')}>결과 확인 완료 · 대기실로 돌아가기</button>}
     {mafia.phase==='DAY_DISCUSS' && <><p>생존자끼리 토론하세요. 첫날 밤 이후부터 투표합니다.</p>{isHost && <button className="primary" disabled={busy} onClick={()=>void act('mafia_day_start_vote')}>토론 종료 · 비밀 투표 시작</button>}</>}
     {voting && <><p>투표 완료 {mafia.vote_submitted_count??0}/{mafia.alive_ids?.length??0}명 · {mafia.phase==='DAY_RUNOFF'?'동률 후보 재투표(마지막)':'생존자 전원 투표'}</p>
       {!mafia.me?.alive ? <p>탈락자는 투표할 수 없어요.</p> : !canVote ? <p>투표를 제출했어요. 다른 참가자를 기다려 주세요.</p> : <>
@@ -97,7 +102,7 @@ function MafiaSettings({roles, participants, editable, save}: {roles:MafiaRoles;
   const changed = MAFIA_ROLES.some(role=>draft[role]!==roles[role]);
   return <section className="card" aria-labelledby="mafia-settings">
     <h2 id="mafia-settings">직업 구성 {editable ? '(방장 설정)' : '(방장만 변경)'}</h2>
-    <p className="hint">7종 중 원하는 직업의 인원을 정하세요. 실제 역할 배정은 다음 개발 단계에서 제공돼요.</p>
+    <p className="hint">7종 중 원하는 직업의 인원을 정하면 게임 시작 시 무작위로 배정돼요.</p>
     {MAFIA_ROLES.map(role=><label key={role}>{ROLE_NAMES[role]}
       <select disabled={!editable || saving} value={draft[role]} onChange={e=>setDraft(old=>({...old,[role]:Number(e.target.value)}))}>
         {Array.from({length:role==='mafia'?5:role==='citizen'?16:2},(_,n)=><option key={n} value={n}>{n}명</option>)}

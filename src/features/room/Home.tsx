@@ -68,6 +68,12 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         {error && <p role="alert" className="error">{error}</p>}
         <button className="primary" disabled={busy}>{busy ? '잠시만요…' : mode === 'create' ? '방 만들기' : '참가하기'}</button>
       </form>
+      <details className="card">
+        <summary>홈 화면에 앱처럼 설치하기</summary>
+        <p>아이폰: Safari에서 공유 → 홈 화면에 추가</p>
+        <p>안드로이드: Chrome 메뉴 → 앱 설치 또는 홈 화면에 추가</p>
+        <p className="hint">게임 진행에는 인터넷 연결이 필요합니다.</p>
+      </details>
     </main>
   );
 }

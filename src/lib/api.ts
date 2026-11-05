@@ -1,11 +1,16 @@
 // Browser API client for the room Edge Functions. Credentials go in headers only.
 export type Session = { room_id: string; code: string; player_id: string; token: string };
 export type Issued = Session & { recovery_code: string };
+export type GameType = 'liar' | 'mafia';
+export const MAFIA_ROLES = ['mafia', 'spy', 'citizen', 'police', 'doctor', 'journalist', 'traitor'] as const;
+export type MafiaRole = typeof MAFIA_ROLES[number];
+export type MafiaRoles = Record<MafiaRole, number>;
 export const THEMES = ['음식','동물','생활용품','장소','취미','자연','운동','크로스핏','여행'] as const;
 export type Settings = {
   word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300;
   theme?: 'random' | typeof THEMES[number]; custom_theme?: string;
   game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard'; liar_count?: 1 | 2;
+  mafia_roles?: MafiaRoles;
 };
 export type Player = { id: string; nickname: string; join_order: number; status: string; wins: number; connected: boolean };
 export type GamePhase = 'LOBBY' | 'COLLECT_WORDS' | 'REVEAL_ROLE' | 'HINT' | 'DISCUSS' | 'PAUSED_HOST' | 'PAUSED_DISCONNECT' | 'VOTE_1' | 'VOTE_RUNOFF' | 'REVEAL_VOTE' | 'REVEAL_LIAR' | 'GUESS' | 'APPEAL_WINDOW' | 'APPEAL_VOTE' | 'FINAL_RESULT';
@@ -33,10 +38,20 @@ export type RoundSnapshot = {
 };
 export type RoomSnapshot = {
   server_now?: string;
-  room: { id: string; code: string; status: string; version: number; host_player_id: string; settings: Settings; locked: boolean; expires_at: string };
+  room: { id: string; code: string; status: string; version: number; host_player_id: string; game_type: GameType; settings: Settings; locked: boolean; expires_at: string };
   me: { player_id: string; is_host: boolean };
   players: Player[];
   round?: RoundSnapshot | null;
+  mafia?: { id:string; phase:'REVEAL_ROLE'|'INTRO'|'NIGHT'|'DAY_DISCUSS'|'DAY_VOTE'|'DAY_RUNOFF'|'DAY_RESULT'|'FINAL_RESULT'; participant_ids:string[]; acknowledged_count:number;
+    night_no?:number;alive_ids?:string[];night_expected_count?:number;night_submitted_count?:number;
+    night_result?:{eliminated_player_id:string|null;eliminated_team:'mafia'|'citizen'|null;journalist:{player_id:string;role:MafiaRole}|null}|null;
+    day_no?:number;day_result?:{eliminated_player_id?:string|null;eliminated_team?:'mafia'|'citizen'|null;runoff_ids?:string[];runoff?:boolean}|null;
+    vote_submitted_count?:number;
+    final_roles?:{player_id:string;role:MafiaRole;original_role:MafiaRole}[]|null;
+    winner?:'mafia'|'citizen'|null;
+    me:{role:MafiaRole;original_role?:MafiaRole;acknowledged:boolean;teammate_ids:string[];alive?:boolean;
+      mission_target_id?:string|null;night_submitted?:boolean;day_voted?:boolean;journalist_used?:boolean;
+      investigation?:{target_id:string;result:MafiaRole|'not_mafia'}|null} | null } | null;
 };
 export class ApiError extends Error {
   constructor(readonly code: string, readonly status: number) { super(code); }
@@ -63,7 +78,7 @@ const json = (body: object, token?: string): RequestInit => ({
 });
 
 export const api = {
-  create: (nickname: string) => call<Issued>('room-create', json({ nickname })),
+  create: (nickname: string, game_type: GameType = 'liar') => call<Issued>('room-create', json({ nickname, game_type })),
   join: (room_code: string, nickname: string) => call<Issued>('room-join', json({ room_code, nickname })),
   recover: (room_code: string, recovery_code: string) => call<Issued>('player-recover', json({ room_code, recovery_code })),
   snapshot: (s: Session) => call<RoomSnapshot>(`room-snapshot?room_id=${encodeURIComponent(s.room_id)}`, { headers: { Authorization: `Bearer ${s.token}` } }),
@@ -100,6 +115,7 @@ const MESSAGES: Record<string, string> = {
   ALREADY_SUBMITTED: '이미 단어를 제출했어요.',
   ALREADY_ACKNOWLEDGED: '이미 역할을 확인했어요.',
   ALREADY_VOTED: '이미 투표했어요. 제출한 표는 바꿀 수 없어요.',
+  JOURNALIST_USED: '기자 취재는 게임당 한 번만 할 수 있어요.',
   INVALID_TARGET: '본인을 제외한 이번 투표의 후보를 선택해 주세요.',
   INVALID_GUESS: '정답은 보이는 글자 1~60자로 입력해 주세요.',
   NOT_GUESSER: '지목된 라이어만 정답 도전을 할 수 있어요.',

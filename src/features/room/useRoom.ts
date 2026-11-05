@@ -4,7 +4,7 @@ import { subscribeToRoomVersion } from '../../lib/realtime';
 import { createPublicClient } from '../../lib/supabase';
 
 const HEARTBEAT_MS = 10_000;
-const RETRY_SAFE = new Set(['update_settings', 'lock', 'kick', 'leave', 'close_room']);
+const RETRY_SAFE = new Set(['update_settings', 'lock', 'kick', 'leave', 'close_room', 'mafia_ack', 'mafia_night_action']);
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const realtime = url && key ? createPublicClient(url, key) : null;

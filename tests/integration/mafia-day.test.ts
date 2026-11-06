@@ -46,6 +46,88 @@ beforeEach(async () => {
 });
 afterEach(async () => { await db.exec('rollback;'); });
 
+it('declares citizen victory when the last actual mafia dies even if spy survives',async()=>{
+  await db.query("update app_private.mafia_round_players set role='spy',original_role='spy' where round_id=$1 and player_id=$2",[roundId,seats[1].id]);
+  await command(0,'mafia_day_start_vote');
+  for(let i=0;i<4;i++)await command(i,'mafia_day_vote',{target_id:i===0?seats[2].id:seats[0].id});
+  expect(await phase()).toMatchObject({phase:'FINAL_RESULT',winner:'citizen',day_result:{eliminated_player_id:seats[0].id}});
+  const spy=(await db.query<{eliminated_at:string|null}>('select eliminated_at from app_private.mafia_round_players where round_id=$1 and player_id=$2',[roundId,seats[1].id])).rows[0];
+  expect(spy.eliminated_at).toBeNull();
+});
+
+it('rejects attacks on known mafia teammates without blocking a spy target',async()=>{
+  await db.query("update app_private.mafia_rounds set phase='NIGHT' where id=$1",[roundId]);
+  await db.query("update app_private.mafia_round_players set role='mafia',original_role='mafia' where round_id=$1 and player_id=$2",[roundId,seats[1].id]);
+  await db.query("update app_private.mafia_round_players set role='spy',original_role='spy' where round_id=$1 and player_id=$2",[roundId,seats[2].id]);
+  await rejected(0,'mafia_night_action',{target_id:seats[1].id},/INVALID_TARGET/);
+  const count=(await db.query<{n:number}>('select count(*)::int n from app_private.mafia_night_actions where round_id=$1',[roundId])).rows[0].n;
+  expect(count).toBe(0);
+  await command(0,'mafia_night_action',{target_id:seats[2].id});
+});
+
+it('pauses on an offline living player, rejects votes, and resumes after reconnect',async()=>{
+  await command(0,'mafia_day_start_vote');
+  await db.query("update app_private.players set last_seen_at=now()-interval '40 seconds' where id=$1",[seats[2].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+  const stopped=(await db.query<{value:{mafia:{disconnect:{missing_ids:string[]};phase:string}}}>('select app_private.room_dto($1,$2) value',[roomId,seats[0].id])).rows[0].value;
+  expect(stopped.mafia.disconnect.missing_ids).toContain(seats[2].id);
+  await rejected(0,'mafia_day_vote',{target_id:seats[1].id},/ROUND_PAUSED/);
+  await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[2].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  expect((await phase()).phase).toBe('DAY_VOTE');
+  await command(0,'mafia_day_vote',{target_id:seats[1].id});
+});
+
+it('lets the connected host extend a paused game or cancel after its reconnect grace',async()=>{
+  await db.query("update app_private.players set last_seen_at=now()-interval '40 seconds' where id=$1",[seats[3].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  await rejected(1,'mafia_cancel_round',{},/HOST_ONLY/);
+  await rejected(0,'mafia_cancel_round',{},/RECONNECT_GRACE/);
+  await db.query("update app_private.mafia_rounds set disconnect_grace_until=now()-interval '1 second' where id=$1",[roundId]);
+  await command(0,'mafia_wait_reconnect');
+  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+  await rejected(0,'mafia_cancel_round',{},/RECONNECT_GRACE/);
+  await db.query("update app_private.mafia_rounds set disconnect_grace_until=now()-interval '1 second' where id=$1",[roundId]);
+  await command(0,'mafia_cancel_round');
+  expect((await phase()).phase).toBe('CANCELLED');
+  const locked=(await db.query<{locked:boolean}>('select locked from app_private.rooms where id=$1',[roomId])).rows[0].locked;
+  expect(locked).toBe(false);
+});
+
+it('hands a disconnected mafia host to an online surviving participant',async()=>{
+  await db.query("update app_private.players set last_seen_at=now()-interval '70 seconds' where id=$1",[seats[0].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  const r=(await db.query<{host_player_id:string}>('select host_player_id from app_private.rooms where id=$1',[roomId])).rows[0];
+  expect(r.host_player_id).toBe(seats[1].id);
+  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+});
+
+it('never delegates an active mafia game to an eliminated participant',async()=>{
+  await db.query('update app_private.mafia_round_players set eliminated_at=now() where round_id=$1 and player_id=$2',[roundId,seats[1].id]);
+  await db.query("update app_private.players set last_seen_at=now()-interval '70 seconds' where id=$1 or id=$2 or id=$3",[seats[0].id,seats[2].id,seats[3].id]);
+  await db.query('select app_private.advance_connectivity($1)',[roomId]);
+  const r=(await db.query<{host_player_id:string}>('select host_player_id from app_private.rooms where id=$1',[roomId])).rows[0];
+  expect(r.host_player_id).toBe(seats[0].id);
+  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+});
+
+it('does not reveal how many night power roles are in the room',async()=>{
+  await db.query("update app_private.mafia_rounds set phase='NIGHT' where id=$1",[roundId]);
+  const dto=(await db.query<{value:{mafia:{night_expected_count:null;night_submitted_count:null}}}>('select app_private.room_dto($1,$2) value',[roomId,seats[2].id])).rows[0].value;
+  expect(dto.mafia.night_expected_count).toBeNull();
+  expect(dto.mafia.night_submitted_count).toBeNull();
+});
+
+it('reuses the installed room maintenance routine for automatic pause and resume',async()=>{
+  await db.query("update app_private.players set last_seen_at=now()-interval '40 seconds' where id=$1",[seats[2].id]);
+  await db.query('select app_private.maintain_rooms()');
+  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+  await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[2].id]);
+  await db.query('select app_private.maintain_rooms()');
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
+});
+
 it('allows only the host to start, validates secret votes and ends on last mafia elimination',async()=>{
   await rejected(1,'mafia_day_start_vote',{},/HOST_ONLY/);
   await command(0,'mafia_day_start_vote');

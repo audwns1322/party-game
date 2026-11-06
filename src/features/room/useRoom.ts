@@ -21,6 +21,15 @@ export function canRetryVote(request: GameRequest, fresh: RoomSnapshot | undefin
     && fresh?.round?.id === payload.round_id && fresh?.round?.phase === request.expected_phase
     && fresh?.round?.vote?.ballot_no === payload.ballot_no && (fresh?.round?.vote?.cycle_no ?? 1) === (payload.cycle_no ?? 1) && fresh?.round?.me?.voted === false;
 }
+export function canRetryMafiaVote(previous: RoomSnapshot, targetId: string, fresh: RoomSnapshot | undefined): fresh is RoomSnapshot {
+  const phase = previous.mafia?.phase;
+  const eligible = phase === 'DAY_VOTE' || phase === 'DAY_RUNOFF';
+  if (!eligible || !fresh?.mafia) return false;
+  return fresh.mafia.id === previous.mafia?.id && fresh.mafia.phase === phase
+    && fresh.mafia.day_no === previous.mafia?.day_no && fresh.mafia.me?.alive === true
+    && fresh.mafia.me.day_voted === false && targetId !== fresh.me.player_id
+    && (phase === 'DAY_RUNOFF' ? fresh.mafia.day_result?.runoff_ids : fresh.mafia.alive_ids)?.includes(targetId) === true;
+}
 
 /** Server snapshot is the only source of truth. Realtime and heartbeat only trigger a re-fetch. */
 export function useRoom(session: Session) {
@@ -97,13 +106,31 @@ export function useRoom(session: Session) {
     try {
       await api.command(session, action, version.current, payload);
     } catch (error) {
-      if (!(error instanceof ApiError && error.code === 'VERSION_CONFLICT' && RETRY_SAFE.has(action))) throw error;
+      if (!(error instanceof ApiError && error.code === 'VERSION_CONFLICT')) throw error;
+      if (action === 'mafia_day_vote' && snapshot) {
+        const targetId = (payload as {target_id?:unknown} | undefined)?.target_id;
+        if (typeof targetId !== 'string') throw error;
+        // Each successful ballot bumps the room version. With 15 simultaneous voters,
+        // another ballot can land between our refresh and retry several times.
+        for (let attempt = 0; attempt < 15; attempt += 1) {
+          const fresh = await refresh();
+          // The server may have accepted this ballot before a transport failure.
+          if (fresh?.mafia?.id === snapshot.mafia?.id && fresh?.mafia?.me?.day_voted) return;
+          if (!canRetryMafiaVote(snapshot,targetId,fresh)) throw error;
+          try { await api.command(session, action, fresh.room.version, payload); return; }
+          catch (retryError) {
+            if (!(retryError instanceof ApiError && retryError.code === 'VERSION_CONFLICT')) throw retryError;
+          }
+        }
+        throw error;
+      }
+      if (!RETRY_SAFE.has(action)) throw error;
       await refresh();
       await api.command(session, action, version.current, payload);
     } finally {
       await refresh();
     }
-  }, [session, refresh]);
+  }, [session, refresh, snapshot]);
 
   const pending = useRef<Parameters<typeof api.game>[1] | null>(null);
   const runGame = useCallback(async (action: string, payload: object = {}) => {

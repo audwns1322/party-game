@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MAFIA_ROLES, messageFor, THEMES, type MafiaRoles, type Player, type Settings } from '../../lib/api';
 import { navigate } from '../../lib/router';
 import { clearSession, type StoredSession } from '../../lib/session';
+import { mafiaNarration } from './mafiaNarration';
 import { useRoom } from './useRoom';
 import { RoundPanel } from './RoundPanel';
 
@@ -11,6 +12,68 @@ const MIN_PLAYERS = 3;
 const ROLE_NAMES: Record<keyof MafiaRoles, string> = { mafia:'마피아',spy:'스파이',citizen:'시민',police:'경찰',doctor:'의사',journalist:'기자',traitor:'배신자' };
 
 type MafiaView = NonNullable<import('../../lib/api').RoomSnapshot['mafia']>;
+function MafiaNarrator({mafia,players,isHost}: {mafia:MafiaView;players:Player[];isHost:boolean}) {
+  const narration = mafiaNarration(mafia,players);
+  const [playing,setPlaying] = useState(false);
+  const [unsupported,setUnsupported] = useState(false);
+  useEffect(()=>{
+    setPlaying(false);
+    return ()=>{if (typeof window!=='undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();};
+  },[narration.key]);
+
+  function speak() {
+    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {setUnsupported(true);return;}
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(narration.text);
+    utterance.lang='ko-KR';
+    utterance.rate=0.95;
+    const koreanVoice=window.speechSynthesis.getVoices().find(voice=>voice.lang.toLowerCase().startsWith('ko'));
+    if (koreanVoice) utterance.voice=koreanVoice;
+    utterance.onend=()=>setPlaying(false);
+    utterance.onerror=()=>setPlaying(false);
+    setPlaying(true);
+    window.speechSynthesis.speak(utterance);
+  }
+
+  return <section className="card" aria-label="사회자 안내">
+    <h2>🎙️ 사회자 안내</h2>
+    {isHost && <p className="notice"><strong>지금 누를 때:</strong> {narration.cue}</p>}
+    <p>{narration.text}</p>
+    {isHost && <div className="row">
+      <button className="primary" type="button" onClick={speak}>{playing?'사회자 멘트 다시 듣기':'🔊 지금 사회자 멘트 듣기'}</button>
+      {playing && <button type="button" onClick={()=>{window.speechSynthesis.cancel();setPlaying(false);}}>음성 중지</button>}
+    </div>}
+    {unsupported && <p role="status" className="hint">이 기기에서는 음성 재생을 지원하지 않아요. 위 멘트를 읽고 진행해 주세요.</p>}
+    {!isHost && <p className="hint">사회자 음성은 방장 기기에서 재생됩니다.</p>}
+  </section>;
+}
+function MafiaDisconnectPanel({mafia,players,isHost,act,busy,serverNow}: {mafia:MafiaView;players:Player[];isHost:boolean;act:(action:string,payload?:object)=>Promise<boolean>;busy:boolean;serverNow?:string}) {
+  const [clock,setClock]=useState({base:serverNow?Date.parse(serverNow):Date.now(),sampled:Date.now(),now:Date.now()});
+  const [confirmCancel,setConfirmCancel]=useState(false);
+  useEffect(()=>{
+    const timer=setInterval(()=>setClock(c=>({...c,now:Date.now()})),1000);
+    return ()=>clearInterval(timer);
+  },[]);
+  useEffect(()=>{
+    const sampled=Date.now();
+    setClock({base:serverNow?Date.parse(serverNow):sampled,sampled,now:sampled});
+  },[serverNow]);
+  const now=clock.base+(clock.now-clock.sampled);
+  const remaining=Math.max(0,Math.ceil((Date.parse(mafia.disconnect?.grace_until??'')-now)/1000)||0);
+  return <section className="card">
+    <h2>참가자 연결을 기다리고 있어요</h2>
+    <p>연결이 끊긴 생존자가 있어 게임을 잠시 멈췄어요. 다시 접속하면 자동으로 이어집니다.</p>
+    <p>재접속 대기: {mafia.disconnect?.missing_ids.map(id=>players.find(p=>p.id===id)?.nickname??'참가자').join(', ')||'연결 확인 중'}</p>
+    {isHost && <>
+      {remaining>0 && <p>방장 선택까지 약 {remaining}초 남았어요.</p>}
+      <button disabled={busy||remaining>0} onClick={()=>void act('mafia_wait_reconnect')}>30초 더 기다리기</button>
+      <button className="danger" disabled={busy||remaining>0} onClick={()=>{
+        if (confirmCancel) {setConfirmCancel(false);void act('mafia_cancel_round');}
+        else setConfirmCancel(true);
+      }}>{confirmCancel?'정말 현재 판을 취소하기':'현재 판 취소'}</button>
+    </>}
+  </section>;
+}
 function MafiaRolePanel({mafia,players,act,busy,isHost}: {mafia:MafiaView;players:Player[];act:(action:string,payload?:object)=>Promise<boolean>;busy:boolean;isHost:boolean}) {
   const [revealed,setRevealed] = useState(false);
   const own = mafia.me;
@@ -34,19 +97,25 @@ function MafiaRolePanel({mafia,players,act,busy,isHost}: {mafia:MafiaView;player
 function MafiaNightPanel({mafia,players,meId,act,busy}: {mafia:MafiaView;players:Player[];meId:string;act:(action:string,payload?:object)=>Promise<boolean>;busy:boolean}) {
   const [open,setOpen]=useState(false);
   const [target,setTarget]=useState('');
+  const [ready,setReady]=useState(false);
   const own=mafia.me;
   const active=new Set(mafia.alive_ids??[]);
   const actionable=own && own.alive && ['mafia','police','doctor','spy','journalist'].includes(own.role);
   return <section className="card" aria-labelledby="mafia-night">
     <h2 id="mafia-night">{mafia.night_no ?? 1}번째 밤</h2>
-    <p>행동 제출 {mafia.night_submitted_count??0}/{mafia.night_expected_count??0}명 · 모든 행동이 완료되면 아침이 됩니다.</p>
-    {!actionable ? <p className="hint">오늘 밤은 별도 행동이 없어요. 다른 참가자를 기다려 주세요.</p> : own.night_submitted ? <p>밤 행동을 제출했어요. 결과를 기다려 주세요.</p> : !open ?
+    <p>각자 비밀 행동을 확인해 주세요. 모든 필수 행동이 완료되면 아침이 됩니다.</p>
+    {own?.alive && !actionable ? ready ? <p>오늘 밤 확인을 마쳤어요. 다른 참가자를 기다려 주세요.</p> : !open ?
+      <button onClick={()=>setOpen(true)}>내 비밀 행동 보기</button> :
+      <><p className="hint">오늘은 선택할 대상이 없어요. 자신의 역할을 확인하고 아래 버튼을 눌러 주세요.</p>
+        <button className="primary" disabled={busy} onClick={()=>{setOpen(false);setReady(true);}}>오늘 밤 확인 완료</button>
+        <button type="button" onClick={()=>setOpen(false)}>행동 숨기기</button></> :
+    !actionable ? <p className="hint">탈락자는 오늘 밤 행동할 수 없어요.</p> : own.night_submitted ? <p>밤 행동을 제출했어요. 결과를 기다려 주세요.</p> : !open ?
       <button onClick={()=>setOpen(true)}>내 비밀 행동 보기</button> : <>
       <p><strong>{ROLE_NAMES[own.role]}</strong>의 밤 행동을 선택해 주세요.</p>
       {!(own.role==='journalist' && own.journalist_used) && <label>대상 선택
         <select value={target} onChange={e=>setTarget(e.target.value)}>
           <option value="">대상을 선택해 주세요</option>
-          {players.filter(p=>active.has(p.id)&&(p.id!==meId||own.role==='doctor')).map(p=><option key={p.id} value={p.id}>{p.nickname}{p.id===meId?' (나)':''}</option>)}
+          {players.filter(p=>active.has(p.id)&&(p.id!==meId||own.role==='doctor')&&!(own.role==='mafia'&&own.teammate_ids.includes(p.id))).map(p=><option key={p.id} value={p.id}>{p.nickname}{p.id===meId?' (나)':''}</option>)}
         </select>
       </label>}
       {own.role==='journalist' && <p className="hint">{own.journalist_used?'이미 취재를 사용했어요. 오늘은 행동 완료만 제출하세요.':'기자는 게임당 한 번만 취재할 수 있어요. 오늘 사용하지 않아도 됩니다.'}</p>}
@@ -162,7 +231,7 @@ export function Lobby({ session }: { session: StoredSession }) {
   async function share() {
     setError(''); setNotice('');
     try {
-      if (navigator.share) await navigator.share({ title: '라이어 게임 초대', text: `방 코드 ${session.code}`, url: inviteUrl });
+      if (navigator.share) await navigator.share({ title: `${snapshot?.room.game_type === 'mafia'?'마피아':'라이어'} 게임 초대`, text: `방 코드 ${session.code}`, url: inviteUrl });
       else { await navigator.clipboard.writeText(inviteUrl); setNotice('초대 링크를 복사했어요.'); }
     } catch { /* user cancelled */ }
   }
@@ -204,6 +273,16 @@ export function Lobby({ session }: { session: StoredSession }) {
   const isHost = me.is_host;
   const needsTheme = room.settings.word_mode === 'custom' && !room.settings.custom_theme?.trim();
   const setting = (patch: Partial<Settings>) => act('update_settings', patch);
+  const mafiaCard = room.game_type!=='mafia' ? null : snapshot.mafia ? snapshot.mafia.phase==='PAUSED_DISCONNECT' ?
+    <MafiaDisconnectPanel mafia={snapshot.mafia} players={players} isHost={isHost} act={act} busy={busy} serverNow={snapshot.server_now}/> :
+    snapshot.mafia.phase==='NIGHT' ?
+      <MafiaNightPanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} meId={me.player_id} act={act} busy={busy}/> :
+    ['DAY_DISCUSS','DAY_VOTE','DAY_RUNOFF','DAY_RESULT','FINAL_RESULT'].includes(snapshot.mafia.phase) ?
+      <MafiaDayPanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} meId={me.player_id} isHost={isHost} act={act} busy={busy}/> :
+      <MafiaRolePanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} act={act} busy={busy} isHost={isHost}/> : isHost ?
+      <button className="primary" disabled={busy || !online || players.length<4 || players.length!==Object.values(room.settings.mafia_roles??{}).reduce((a,b)=>a+b,0) || players.some(p=>!p.connected)} onClick={()=>void act('mafia_start')}>
+        {players.length<4?'4명 이상 모이면 시작할 수 있어요':'게임 시작 · 비밀 역할 배정'}
+      </button> : <p className="hint">방장이 마피아 게임을 시작하면 역할을 확인할 수 있어요.</p>;
 
   return (
     <main>
@@ -220,6 +299,11 @@ export function Lobby({ session }: { session: StoredSession }) {
         <summary>QR 코드로 초대</summary>
         {qr && <img className="qr" src={qr} alt="이 방 초대 QR 코드" width={180} height={180} />}
       </details>
+
+      {error && <p role="alert" className="error">{error}</p>}
+      {notice && <p role="status" className="notice">{notice}</p>}
+      {room.game_type==='mafia' && snapshot.mafia && <MafiaNarrator key={snapshot.mafia.id} mafia={snapshot.mafia} players={players} isHost={isHost}/>}
+      {mafiaCard}
 
       <section className="card" aria-labelledby="roster">
         <h2 id="roster">참가자 {players.length}/{MAX_PLAYERS}{room.locked && <span className="tag">입장 잠김</span>}</h2>
@@ -242,16 +326,7 @@ export function Lobby({ session }: { session: StoredSession }) {
         </ul>
       </section>
 
-      {error && <p role="alert" className="error">{error}</p>}
-      {notice && <p role="status" className="notice">{notice}</p>}
-      {room.game_type === 'mafia' ? snapshot.mafia ? snapshot.mafia.phase==='NIGHT' ?
-        <MafiaNightPanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} meId={me.player_id} act={act} busy={busy}/> :
-        ['DAY_DISCUSS','DAY_VOTE','DAY_RUNOFF','DAY_RESULT','FINAL_RESULT'].includes(snapshot.mafia.phase) ? <MafiaDayPanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} meId={me.player_id} isHost={isHost} act={act} busy={busy}/> :
-        <MafiaRolePanel key={`${snapshot.mafia.id}:${snapshot.mafia.phase}`} mafia={snapshot.mafia} players={players} act={act} busy={busy} isHost={isHost}/> : isHost ?
-        <button className="primary" disabled={busy || !online || players.length<4 || players.length!==Object.values(room.settings.mafia_roles??{}).reduce((a,b)=>a+b,0) || players.some(p=>!p.connected)} onClick={()=>void act('mafia_start')}>
-          {players.length<4?'4명 이상 모이면 시작할 수 있어요':'게임 시작 · 비밀 역할 배정'}
-        </button> : <p className="hint">방장이 마피아 게임을 시작하면 역할을 확인할 수 있어요.</p>
-      : round ? <RoundPanel key={`${round.id}:${round.phase}`} snapshot={snapshot} busy={busy} run={play} /> : isHost ? (
+      {room.game_type === 'mafia' ? null : round ? <RoundPanel key={`${round.id}:${round.phase}`} snapshot={snapshot} busy={busy} run={play} /> : isHost ? (
         <button className="primary" disabled={busy || !online || needsTheme || players.length < MIN_PLAYERS || players.some(p => !p.connected)} onClick={() => void play('start_round')}>
           {needsTheme ? '게임 설정에서 테마를 저장해 주세요' : players.length < MIN_PLAYERS ? `${MIN_PLAYERS}명 이상 모이면 시작할 수 있어요` : '게임 시작 · 역할 배정'}
         </button>

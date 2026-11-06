@@ -188,7 +188,7 @@ export function snapshotRoomHandler(rpc: Rpc, broadcast?: Broadcast) {
     return reply(200, dto);
   });
 }
-const ACTIONS = new Set(['heartbeat', 'update_settings', 'lock', 'kick', 'leave', 'close_room', 'mafia_start', 'mafia_ack', 'mafia_intro_done', 'mafia_night_action', 'mafia_day_start_vote', 'mafia_day_vote', 'mafia_day_next_night', 'mafia_finish']);
+const ACTIONS = new Set(['heartbeat', 'update_settings', 'lock', 'kick', 'leave', 'close_room', 'mafia_start', 'mafia_ack', 'mafia_intro_done', 'mafia_night_action', 'mafia_day_start_vote', 'mafia_day_vote', 'mafia_day_next_night', 'mafia_finish', 'mafia_wait_reconnect', 'mafia_cancel_round']);
 const MAX_INT = 2147483647;
 export function commandHandler(rpc: Rpc, broadcast: Broadcast) {
   return guard(async (request) => {

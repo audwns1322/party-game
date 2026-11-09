@@ -1,1 +1,6 @@
-{ "rewrites": [{ "source": "/room/(.*)", "destination": "/index.html" }] }
+{
+  "rewrites": [
+    { "source": "/room/(.*)", "destination": "/index.html" },
+    { "source": "/quoridor-preview", "destination": "/index.html" }
+  ]
+}

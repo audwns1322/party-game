@@ -61,10 +61,10 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
           <legend>게임 종류 선택</legend>
           <div className="game-options">
             <button type="button" className={gameType==='liar'?'game-option selected':'game-option'} aria-pressed={gameType==='liar'} onClick={()=>setGameType('liar')}>
-              <span aria-hidden="true">🕵️</span><strong>라이어 게임</strong><small>정식 운영</small>
+              <span aria-hidden="true">🕵️</span><strong>라이어 게임</strong>
             </button>
             <button type="button" className={gameType==='mafia'?'game-option selected':'game-option'} aria-pressed={gameType==='mafia'} onClick={()=>setGameType('mafia')}>
-              <span aria-hidden="true">🌙</span><strong>마피아 게임</strong><small>베타 · 연결 복구 개발 중</small>
+              <span aria-hidden="true">🌙</span><strong>마피아 게임</strong>
             </button>
           </div>
         </fieldset>}
@@ -80,6 +80,12 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         {error && <p role="alert" className="error">{error}</p>}
         <button className="primary" disabled={busy}>{busy ? '잠시만요…' : mode === 'create' ? '방 만들기' : '참가하기'}</button>
       </form>
+      <section className="card" aria-labelledby="quoridor-preview-title">
+        <h2 id="quoridor-preview-title">쿼리도 3D 미리보기</h2>
+        <p>프리미엄 우드와 모던 네온 테마를 비교하고, 2인·4인 로컬 규칙을 체험할 수 있어요.</p>
+        <button type="button" className="primary" onClick={() => navigate('/quoridor-preview')}>3D 게임판 체험하기</button>
+        <p className="hint">온라인 방 대전은 아직 지원하지 않는 미리보기입니다.</p>
+      </section>
       <details className="card">
         <summary>홈 화면에 앱처럼 설치하기</summary>
         <p>아이폰: Safari에서 공유 → 홈 화면에 추가</p>

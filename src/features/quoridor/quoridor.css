@@ -79,3 +79,20 @@ main.quoridor{width:100%;max-width:none;margin:0;padding:22px max(16px,calc((100
 .quoridor .q-reset{width:100%}
 @media(max-width:580px){main.quoridor{padding:17px 12px 38px}.quoridor .q-hotspot{width:34px;height:34px}}
 @media(max-width:360px){.quoridor .q-hotspot{width:31px;height:31px}}
+
+/* Online lobby uses the same art direction without inheriting the app's form width. */
+.q-online-invite{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px}
+.q-online-invite button,.q-online-config button{background:transparent;color:inherit;border:1px solid currentColor;border-radius:9px;padding:9px 13px;cursor:pointer}
+.q-online-lobby{margin:16px 0 26px;padding:24px;border-radius:16px;border:1px solid rgba(190,171,143,.35);background:rgba(50,44,38,.23);color:inherit}
+.q-online-lobby h2{margin:0 0 12px;font-size:24px}
+.q-online-lobby p{font-size:14px;line-height:1.6}
+.q-online-roster{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}
+.q-online-roster span{padding:9px 12px;border:1px solid rgba(185,173,157,.45);border-radius:12px;font-size:13px}
+.q-online-config{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:18px 0}
+.q-online-config label{display:flex;align-items:center;gap:7px;font-size:14px}
+.q-online-config select{width:auto;min-width:85px;min-height:38px;margin:0;border-radius:8px;padding:6px;background:rgba(20,22,25,.85);color:#fff;border:1px solid #858585}
+.q-online-config input{accent-color:#b38d5d}
+.q-online-lobby .q-start{margin:12px 0 0}
+.q-online-winner{font-size:19px!important;font-weight:800}
+.q-online-error{padding:12px 15px;background:#7b2629;color:#fff;border-radius:9px}
+@media(max-width:580px){.q-online-lobby{padding:18px 14px}.q-online-config{flex-direction:column;align-items:stretch}.q-online-config label{justify-content:space-between}}

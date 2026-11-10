@@ -54,3 +54,11 @@
 .q-pawn:before{left:4%;width:92%;height:38%;bottom:-3px}
 .q-pawn-head{top:-26%;left:10%;width:80%;background:radial-gradient(circle at 27% 20%,#ffffffbd,transparent 38%),var(--pawn-color);box-shadow:inset -7px -8px 11px #0004,0 4px 5px #0006}
 @media(max-width:580px){.q-pawn{width:76%;height:80%;transform:translateY(-7px);box-shadow:0 6px 0 #0005,0 10px 8px #0007,inset -4px -4px 7px #0004}}
+
+/* Tall chess-like silhouettes; size is intentionally bigger than a single tile height. */
+.q-cell{overflow:visible}
+.q-pawn{width:68%;height:128%;align-self:end;margin-bottom:9%;border-radius:42% 42% 19% 19%;transform:translateY(-4px);background:linear-gradient(105deg,#ffffff8a 0%,#ffffff23 28%,transparent 48%,#00000040 90%),var(--pawn-color);box-shadow:0 8px 0 #0005,0 20px 13px #0009,inset -8px -6px 11px #0005,inset 3px 5px 8px #fff6}
+.q-pawn:before{left:-8%;width:116%;height:23%;bottom:-6px;border:2px solid #ffffff4d;filter:brightness(.7);box-shadow:0 5px 5px #0006}
+.q-pawn-head{top:-23%;left:4%;width:92%;border:1px solid #ffffff46;box-shadow:inset -10px -10px 14px #0005,inset 4px 4px 8px #ffffff64,0 6px 7px #0007}
+.quoridor.neon .q-pawn{filter:drop-shadow(0 0 10px var(--pawn-color))}
+@media(max-width:580px){.q-pawn{width:70%;height:122%;margin-bottom:7%;transform:translateY(-2px);box-shadow:0 5px 0 #0005,0 12px 9px #0008,inset -5px -4px 8px #0005}}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkBombAnswer, nextBombHolder, normalizeBombAnswer, randomExplosionDelay } from '../../src/features/bomb-pass/demoEngine';
+import { checkBombAnswer, nextBombHolder, normalizeBombAnswer, randomBombHolder, randomExplosionDelay } from '../../src/features/bomb-pass/demoEngine';
 
 describe('폭탄 돌리기 미리보기 로직', () => {
   it('최대 시간을 지키되 최소 대기 시간을 강제하지 않는다', () => {
@@ -22,5 +22,14 @@ describe('폭탄 돌리기 미리보기 로직', () => {
   it('순환 순서가 마지막 참가자에서 처음으로 이어진다', () => {
     expect(nextBombHolder(4, 5)).toBe(0);
     expect(nextBombHolder(1, 5)).toBe(2);
+  });
+
+  it('랜덤 지목은 참가자 중 한 명을 선택하고 직전 보유자는 제외한다', () => {
+    expect(randomBombHolder(null, 5, () => 0)).toBe(0);
+    expect(randomBombHolder(null, 5, () => 0.99)).toBe(4);
+    expect(randomBombHolder(2, 5, () => 0)).toBe(0);
+    expect(randomBombHolder(2, 5, () => 0.5)).toBe(3);
+    expect(randomBombHolder(2, 5, () => 0.99)).toBe(4);
+    expect(() => randomBombHolder(5, 5)).toThrow(RangeError);
   });
 });

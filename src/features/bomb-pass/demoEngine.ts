@@ -32,3 +32,14 @@ export function nextBombHolder(current: number, playerCount: number): number {
   if (playerCount < 2 || current < 0 || current >= playerCount) throw new RangeError('Invalid player order.');
   return (current + 1) % playerCount;
 }
+
+/** Pick uniformly from the players, excluding the current holder when passing. */
+export function randomBombHolder(current: number | null, playerCount: number, random = Math.random): number {
+  if (playerCount < 2 || (current !== null && (current < 0 || current >= playerCount))) {
+    throw new RangeError('Invalid player order.');
+  }
+  const choices = current === null ? playerCount : playerCount - 1;
+  const draw = Math.min(1, Math.max(0, random()));
+  const slot = Math.min(choices - 1, Math.floor(draw * choices));
+  return current !== null && slot >= current ? slot + 1 : slot;
+}

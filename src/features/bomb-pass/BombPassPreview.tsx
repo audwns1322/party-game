@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { navigate } from '../../lib/router';
 import { playBombExplosion } from './bombAudio';
-import { BOMB_TOPICS, DEMO_PLAYERS, checkBombAnswer, nextBombHolder, randomExplosionDelay } from './demoEngine';
+import { BOMB_TOPICS, DEMO_PLAYERS, checkBombAnswer, nextBombHolder, randomBombHolder, randomExplosionDelay } from './demoEngine';
 import './bomb-pass.css';
 
 type Phase = 'ready' | 'countdown' | 'playing' | 'exploded' | 'finished';
 type AnswerMode = 'voice' | 'text';
+type TurnStyle = 'pass' | 'random';
 type SubmittedAnswer = { player: string; answer: string };
-const maxOptions = [15, 30, 45, 60, 90, 120];
+const maxOptions = [15, 30, 45, 60, 90, 120, 180];
+
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  if (minutes === 0) return `${remaining}초`;
+  return `${minutes}분${remaining ? ` ${remaining}초` : ''}`;
+}
 
 export function BombPassPreview() {
   const [phase, setPhase] = useState<Phase>('ready');
   const [mode, setMode] = useState<AnswerMode>('voice');
+  const [turnStyle, setTurnStyle] = useState<TurnStyle>('pass');
   const [maxSeconds, setMaxSeconds] = useState(45);
   const [playerCount, setPlayerCount] = useState(5);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -64,21 +73,6 @@ export function BombPassPreview() {
   }, [phase, holder, soundEnabled]);
 
   useEffect(() => {
-    if (phase !== 'exploded') return;
-    const timer = window.setTimeout(() => {
-      setRound(value => value + 1);
-      setTopicIndex(value => (value + 1) % BOMB_TOPICS.length);
-      setHolder(value => nextBombHolder(value, playerCount));
-      setAnswers([]);
-      setAnswer('');
-      setFeedback('');
-      setCountdown(3);
-      setPhase('countdown');
-    }, 3000);
-    return () => window.clearTimeout(timer);
-  }, [phase, playerCount]);
-
-  useEffect(() => {
     if (!active || startedAt.current === null) return;
     const timer = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt.current!) / 1000)), 1000);
     return () => window.clearInterval(timer);
@@ -88,7 +82,7 @@ export function BombPassPreview() {
     if (soundEnabled) unlockAudio();
     setRound(1);
     setTopicIndex(0);
-    setHolder(0);
+    setHolder(turnStyle === 'random' ? randomBombHolder(null, playerCount) : 0);
     setExplodedHolder(null);
     setExplosionCounts(Array(DEMO_PLAYERS.length).fill(0));
     setAnswers([]);
@@ -98,6 +92,19 @@ export function BombPassPreview() {
     setElapsedSeconds(0);
     startedAt.current = Date.now();
     bombDeadline.current = null;
+    setPhase('countdown');
+  }
+
+  function startNextRound() {
+    if (phase !== 'exploded') return;
+    setRound(value => value + 1);
+    setTopicIndex(value => (value + 1) % BOMB_TOPICS.length);
+    setHolder(value => turnStyle === 'random' ? randomBombHolder(null, playerCount) : nextBombHolder(value, playerCount));
+    setExplodedHolder(null);
+    setAnswers([]);
+    setAnswer('');
+    setFeedback('');
+    setCountdown(3);
     setPhase('countdown');
   }
 
@@ -111,8 +118,9 @@ export function BombPassPreview() {
       setAnswers(previous => [...previous, { player: players[holder], answer: answer.trim() }]);
       setAnswer('');
     }
-    setHolder(current => nextBombHolder(current, playerCount));
-    setFeedback('폭탄을 다음 사람에게 넘겼어요!');
+    const nextHolder = turnStyle === 'random' ? randomBombHolder(holder, playerCount) : nextBombHolder(holder, playerCount);
+    setHolder(nextHolder);
+    setFeedback(turnStyle === 'random' ? `🎯 다음 지목: ${players[nextHolder]}님!` : '폭탄을 다음 사람에게 넘겼어요!');
   }
 
   function finishGame() {
@@ -159,37 +167,51 @@ export function BombPassPreview() {
             <div className="bp-stage-copy" role="status" aria-live="polite">
               {phase === 'ready' && <><strong>준비됐어?</strong><span>폭탄을 넘길 준비를 해봐!</span></>}
               {phase === 'countdown' && <><strong className="bp-countdown">{countdown === 0 ? 'START!' : countdown}</strong><span>주제 확인하고 집중!</span></>}
-              {phase === 'playing' && <><strong>{players[holder]}님의 차례!</strong><span>빨리 답하고 폭탄을 넘겨!</span></>}
-              {phase === 'exploded' && <><strong>{players[explodedHolder ?? 0]}님, 터졌다!</strong><span>3초 후 다음 라운드 자동 시작</span></>}
+              {phase === 'playing' && <><strong>{turnStyle === 'random' ? '🎯 ' : ''}{players[holder]}님의 차례!</strong><span>{turnStyle === 'random' ? '갑자기 지목됐다! 서둘러 답해!' : '빨리 답하고 폭탄을 넘겨!'}</span></>}
+              {phase === 'exploded' && <><strong>{players[explodedHolder ?? 0]}님, 터졌다!</strong><span>다음 라운드는 준비되면 시작해!</span></>}
               {phase === 'finished' && <><strong>오늘의 폭탄 파티 종료!</strong><span>언제든 또 시작할 수 있어.</span></>}
             </div>
           </div>
 
           {(phase === 'countdown' || phase === 'playing' || phase === 'exploded') &&
-            <div className="bp-topic"><span>이번 주제</span><strong>{topic}</strong><small>폭발 시각은 비밀 · 최대 {maxSeconds}초</small></div>}
+            <div className="bp-topic"><span>이번 주제</span><strong>{topic}</strong><small>폭발 시각은 비밀 · 최대 {formatDuration(maxSeconds)}</small></div>}
 
           {phase === 'ready' && <div className="bp-controls">
-            <p className="bp-subheading">HOW TO PLAY</p>
-            <div className="bp-instructions"><span>01 <strong>주제를 확인해</strong></span><span>02 <strong>답을 말하거나 입력해</strong></span><span>03 <strong>폭탄을 넘겨!</strong></span></div>
+            <section className="bp-howto" aria-labelledby="bp-howto-title">
+              <div className="bp-howto-heading"><span>⚡ 10초 룰 설명</span><h2 id="bp-howto-title">받고, 답하고, 넘겨!</h2></div>
+              <ol className="bp-instructions">
+                <li><span className="bp-step-icon" aria-hidden="true">👀</span><strong>주제 확인</strong><small>예: 과일 이름</small></li>
+                <li><span className="bp-step-icon" aria-hidden="true">🗣️</span><strong>빠르게 답하기</strong><small>“사과!”</small></li>
+                <li><span className="bp-step-icon" aria-hidden="true">💣</span><strong>{turnStyle === 'random' ? '랜덤 지목!' : '다음 사람에게!'}</strong><small>{turnStyle === 'random' ? '누가 걸릴지 몰라' : '답했으면 바로 패스'}</small></li>
+                <li><span className="bp-step-icon" aria-hidden="true">💥</span><strong>갑자기 BOOM!</strong><small>들고 있던 사람 당첨</small></li>
+              </ol>
+              <p className="bp-howto-footer">🎉 탈락 없이 계속 플레이! <span>언제 터질지는 아무도 몰라.</span></p>
+            </section>
+            <div className="bp-turn-style" role="group" aria-labelledby="bp-style-label">
+              <span className="bp-field-label" id="bp-style-label">진행 방식</span>
+              <div className="bp-toggle bp-style-toggle"><button type="button" className={turnStyle === 'pass' ? 'selected' : ''} aria-pressed={turnStyle === 'pass'} onClick={() => setTurnStyle('pass')}>📱 순서대로 돌리기</button><button type="button" className={turnStyle === 'random' ? 'selected' : ''} aria-pressed={turnStyle === 'random'} onClick={() => setTurnStyle('random')}>🎲 랜덤 지목</button></div>
+              <p className="bp-style-description">{turnStyle === 'random' ? '답할 때마다 다른 사람이 무작위로 지목돼요. 타이머는 멈추지 않습니다. (현재는 1기기 시뮬레이션)' : '한 대의 폰을 돌려 쓰는 현장 모드예요. 답하고 다음 사람에게 넘겨 주세요.'}</p>
+            </div>
             <div className="bp-fields">
               <div><span className="bp-field-label" id="bp-mode-label">답변 방식</span><div className="bp-toggle" role="group" aria-labelledby="bp-mode-label"><button type="button" aria-pressed={mode === 'voice'} className={mode === 'voice' ? 'selected' : ''} onClick={() => setMode('voice')}>🎙️ 말하기</button><button type="button" aria-pressed={mode === 'text'} className={mode === 'text' ? 'selected' : ''} onClick={() => setMode('text')}>⌨️ 텍스트</button></div></div>
-              <div><label htmlFor="bp-max">최대 폭발 시간</label><select id="bp-max" value={maxSeconds} onChange={event => setMaxSeconds(Number(event.target.value))}>{maxOptions.map(value => <option key={value} value={value}>최대 {value}초</option>)}</select></div>
+              <div><label htmlFor="bp-max">최대 폭발 시간</label><select id="bp-max" value={maxSeconds} onChange={event => setMaxSeconds(Number(event.target.value))}>{maxOptions.map(value => <option key={value} value={value}>최대 {formatDuration(value)}</option>)}</select></div>
               <div><label htmlFor="bp-count">참가 인원 (데모)</label><select id="bp-count" value={playerCount} onChange={event => setPlayerCount(Number(event.target.value))}>{[3, 4, 5, 6, 8, 10, 12, 15].map(value => <option key={value} value={value}>{value}명</option>)}</select></div>
             </div>
             <button type="button" className="bp-main-button" onClick={startGame}>게임 시작하기 <span>→</span></button>
-            <small className="bp-note">최소 폭발 시간은 없어요. 시작 직후에도 터질 수 있습니다.</small>
+            <small className="bp-note">📱 지금은 휴대폰 한 대로 체험하는 데모예요. 여러 기기 연결은 아직 지원하지 않아요.</small>
+            <small className="bp-note bp-time-note">폭발 시점은 완전 랜덤 · 시작 직후에도 터질 수 있어요!</small>
           </div>}
 
           {phase === 'playing' && <div className="bp-actions">
             {mode === 'text' ? <form onSubmit={passBomb}>
               <label htmlFor="bp-answer">주제에 맞는 답변</label>
               <input id="bp-answer" value={answer} onChange={event => { setAnswer(event.target.value); setFeedback(''); }} placeholder="예: 사과" maxLength={50} autoComplete="off" enterKeyHint="send"/>
-              <button type="submit" className="bp-main-button">답변하고 넘기기 <span>→</span></button>
-            </form> : <><p>답을 크게 말한 다음 버튼을 눌러!</p><button type="button" className="bp-main-button" onClick={() => passBomb()}>폭탄 넘기기 <span>→</span></button></>}
+              <button type="submit" className="bp-main-button">{turnStyle === 'random' ? '답변하고 다음 사람 지목' : '답변하고 넘기기'} <span>→</span></button>
+            </form> : <><p>답을 크게 말한 다음 버튼을 눌러!</p><button type="button" className="bp-main-button" onClick={() => passBomb()}>{turnStyle === 'random' ? '🎲 다음 사람 지목하기' : '폭탄 넘기기'} <span>→</span></button></>}
             <p role="status" className="bp-feedback">{feedback || '정확한 남은 시간은 표시하지 않아요.'}</p>
           </div>}
 
-          {phase === 'exploded' && <div className="bp-result-mini"><span>💥 {players[explodedHolder ?? 0]}님의 누적 폭발</span><strong>{explosionCounts[explodedHolder ?? 0]}회</strong></div>}
+          {phase === 'exploded' && <div className="bp-between-rounds"><div className="bp-result-mini"><span>💥 {players[explodedHolder ?? 0]}님의 누적 폭발</span><strong>{explosionCounts[explodedHolder ?? 0]}회</strong></div><h2>한 판 더 할까요?</h2><p>폭탄은 멈췄어요. 모두 준비되면 다시 시작!</p><button type="button" className="bp-main-button" onClick={startNextRound}>▶ 다음 라운드 시작</button><button type="button" className="bp-end" onClick={finishGame}>오늘은 여기까지</button></div>}
           {phase === 'countdown' && <p className="bp-waiting">서두르지 마! 시작 신호가 나오면 답변할 수 있어.</p>}
           {phase === 'finished' && <div className="bp-final-summary"><div><span>총 라운드</span><strong>{totalExplosions}</strong></div><div><span>플레이 시간</span><strong>{Math.floor(elapsedSeconds / 60)}분 {elapsedSeconds % 60}초</strong></div><button type="button" className="bp-main-button" onClick={startGame}>같은 인원으로 다시 시작 →</button></div>}
         </section>
@@ -202,7 +224,7 @@ export function BombPassPreview() {
             </div>)}</div>
             {active && <button type="button" className="bp-end" onClick={() => setConfirmStop(true)}>■ 게임 종료하기</button>}
           </section>
-          <section className="bp-side-panel bp-tip-panel"><span>✦ PARTY TIPS</span><p>목숨도, 탈락도 없어. 폭탄이 터져도 모두 다시 참여해. 끝내고 싶을 때 종료하면 돼!</p><div className="bp-progress-note"><span>최대 시간만 공개</span><b>{maxSeconds} SEC MAX</b></div></section>
+          <section className="bp-side-panel bp-tip-panel"><span>✦ PARTY TIPS</span><p>목숨도, 탈락도 없어. 폭탄이 터져도 모두 다시 참여해. 끝내고 싶을 때 종료하면 돼!</p><div className="bp-progress-note"><span>최대 시간만 공개</span><b>{formatDuration(maxSeconds)} MAX</b></div></section>
           {mode === 'text' && active && <section className="bp-side-panel bp-answer-history"><span>이번 라운드의 답</span>{answers.length === 0 ? <p>아직 제출된 답이 없어요.</p> : <ol>{answers.slice(-6).map((item, index) => <li key={`${item.player}-${index}`}><strong>{item.player}</strong><span>{item.answer}</span></li>)}</ol>}</section>}
         </aside>
       </div>

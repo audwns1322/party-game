@@ -113,11 +113,11 @@ export function QuoridorOnline({session,room,me,players,online}:Props) {
         {Boolean(state?.turnLimit)&&game.winner===null&&<div className={`q-timer${remaining!==null&&remaining<=5?' urgent':''}`} role="timer"><span>TURN TIMER</span><strong>{remaining}초</strong>{state?.extended&&<em>연장 중 · 다시 초과하면 턴 넘김</em>}<div className="q-timer-track"><i style={{width:`${Math.min(100,(remaining??0)/(state?.turnLimit??1)*100)}%`}}/></div></div>}
         <div className="q-stage"><div className="q-board"><div className="q-grid">
           {Array.from({length:81},(_,index)=>{const r=Math.floor(index/9),c=index%9;
-            const occupant=game.positions.findIndex(p=>p[0]===r&&p[1]===c);
             const available=moves.some(p=>p[0]===r&&p[1]===c);
             return <button type="button" key={index} aria-label={`${r+1}행 ${c+1}열`} className={`q-cell${available?' available':''}${pending?.type==='move'&&same(pending.to,[r,c])?' chosen':''}`} onClick={()=>chooseCell(r,c)} disabled={!yourTurn||wallMode}>
-              {occupant>=0&&<Pawn3D color={colors[occupant]} player={occupant}/>}</button>;})}
+              </button>;})}
         </div><div className="q-wall-layer" aria-hidden="true">{displayedWalls.map((w,i)=>{const preview=i===displayedWalls.length-1&&pending?.type==='wall';return <span key={i} className={`q-wall ${w.vertical?'vertical':'horizontal'}${preview?' ghost':''}${preview&&!wallLegal?' invalid':''}`} style={{left:`${joint(w.c)}%`,top:`${joint(w.r)}%`}}/>;})}</div>
+        <div className="q-pawn-layer" aria-hidden="true">{game.positions.map(([r,c],player)=><div key={player} className="q-pawn-position" style={{left:`${(c+.5)/9*100}%`,top:`${(r+.5)/9*100}%`}}><Pawn3D color={colors[player]} player={player}/></div>)}</div>
         {yourTurn&&wallMode&&<div className="q-hotspots" role="group" aria-label="벽 설치 위치">{Array.from({length:64},(_,i)=>{const r=Math.floor(i/8),c=i%8;return <button key={i} type="button" aria-label={`${r+1}행 ${c+1}열 ${vertical?'세로':'가로'} 벽`} className={`q-hotspot${pending?.type==='wall'&&pending.wall.r===r&&pending.wall.c===c?' chosen':''}`} style={{left:`${joint(c)}%`,top:`${joint(r)}%`}} onClick={()=>chooseWall(r,c)}><span className={vertical?'v':'h'}/></button>;})}</div>}
         </div></div>
         {pending&&pending.type!=='skip'&&yourTurn&&<div className="q-board-confirm" role="group"><span>{pending.type==='wall'?'이 위치에 벽 설치':'이 위치로 말 이동'}</span><div><button type="button" onClick={()=>setPending(null)}>취소</button><button type="button" className="accept" disabled={!ready||busy} onClick={()=>void command(pending.type,pending.type==='move'?{to:pending.to}:{wall:pending.wall})}>✓ 선택 확정</button></div></div>}

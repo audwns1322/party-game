@@ -163,12 +163,10 @@ export function QuoridorPreview() {
             <div className="q-grid">
               {Array.from({ length: 81 }, (_, index) => {
                 const r = Math.floor(index / 9), c = index % 9;
-                const occupant = game.positions.findIndex(p => p[0] === r && p[1] === c);
                 const available = moves.some(p => p[0] === r && p[1] === c);
                 return <button type="button" key={index} aria-label={`${r + 1}행 ${c + 1}열`}
                   className={`q-cell${available ? ' available' : ''}${pending?.type === 'move' && same(pending.to, [r,c]) ? ' chosen' : ''}`}
                   onClick={() => chooseCell(r,c)} disabled={!started || wallMode || game.winner !== null}>
-                  {occupant >= 0 && <Pawn3D color={pawnColors[occupant]} player={occupant} />}
                 </button>;
               })}
             </div>
@@ -179,6 +177,13 @@ export function QuoridorPreview() {
                 return <span key={index} className={`q-wall ${wall.vertical ? 'vertical' : 'horizontal'}${preview ? ' ghost' : ''}${preview && !wallLegal ? ' invalid' : ''}`}
                   style={{ left: `${jointPercent(wall.c)}%`, top: `${jointPercent(wall.r)}%` }} />;
               })}
+            </div>
+
+            <div className="q-pawn-layer" aria-hidden="true">
+              {game.positions.map(([r, c], player) => <div key={player} className="q-pawn-position"
+                style={{ left: `${(c + .5) / 9 * 100}%`, top: `${(r + .5) / 9 * 100}%` }}>
+                <Pawn3D color={pawnColors[player]} player={player} />
+              </div>)}
             </div>
 
             {started && wallMode && game.winner === null && <div className="q-hotspots" role="group" aria-label={`${vertical ? '세로' : '가로'} 벽 위치 선택`}>

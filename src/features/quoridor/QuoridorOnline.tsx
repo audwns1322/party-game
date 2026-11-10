@@ -78,7 +78,7 @@ export function QuoridorOnline({session,room,me,players,online}:Props) {
 
   return <main className={`quoridor ${theme}`}>
     <div className="q-header"><button type="button" onClick={()=>navigate('/')}>← Party Game</button><span>QUORIDOR / ONLINE MATCH</span></div>
-    <div className="q-heading"><p>THE ART OF STRATEGY</p><h1>각자의 폰에서, 하나의 승부.</h1><span>방 코드 {room.code} · {online?'서버 연결 중':'연결 재시도 중'}</span></div>
+    <div className="q-heading"><p>THE ART OF STRATEGY</p><h1>각자의 폰에서, 하나의 승부.</h1><span>방 코드 {room.code} · {online?'실시간 연결됨':'연결 재시도 중'}</span></div>
     <div className="q-toolbar">
       <div className="q-segment" aria-label="개인별 테마 선택">
         <button type="button" className={theme==='wood'?'active':''} onClick={()=>setAppearance('wood')}>◈ 프리미엄 우드</button>

@@ -48,3 +48,9 @@
 .q-timer.urgent strong{color:#ff777b;animation:qPulse 1s ease-in-out infinite}
 .q-timer.urgent .q-timer-track i{background:#ff777b}
 @media(max-width:580px){.q-timer-setup{width:100%;justify-content:center}.q-board-confirm{min-width:0;width:100%;padding:10px;gap:8px}.q-board-confirm>span{font-size:10px}.q-board-confirm button{padding:9px 9px;font-size:11px}}
+
+/* Taller and more prominent pawns, retaining clearance around legal-move markers. */
+.q-pawn{width:76%;height:82%;border-radius:36% 36% 23% 23%;transform:translateY(-11px);box-shadow:0 9px 0 #0005,0 17px 12px #0008,inset -7px -6px 9px #0004,inset 3px 3px 7px #fff5}
+.q-pawn:before{left:4%;width:92%;height:38%;bottom:-3px}
+.q-pawn-head{top:-26%;left:10%;width:80%;background:radial-gradient(circle at 27% 20%,#ffffffbd,transparent 38%),var(--pawn-color);box-shadow:inset -7px -8px 11px #0004,0 4px 5px #0006}
+@media(max-width:580px){.q-pawn{width:76%;height:80%;transform:translateY(-7px);box-shadow:0 6px 0 #0005,0 10px 8px #0007,inset -4px -4px 7px #0004}}

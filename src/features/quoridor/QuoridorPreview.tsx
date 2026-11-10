@@ -1,9 +1,10 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import {
   applyQuoridorAction, canPlaceWall, createQuoridorGame, legalPawnMoves,
   type Position, type QuoridorAction, type QuoridorGame,
 } from './engine';
 import './quoridor.css';
+import { Pawn3D } from './Pawn3D';
 
 const same = (a: Position, b: Position) => a[0] === b[0] && a[1] === b[1];
 const pawnColors = ['#f5ddb5', '#444b58', '#f2a957', '#83b6ea'];
@@ -167,7 +168,7 @@ export function QuoridorPreview() {
                 return <button type="button" key={index} aria-label={`${r + 1}행 ${c + 1}열`}
                   className={`q-cell${available ? ' available' : ''}${pending?.type === 'move' && same(pending.to, [r,c]) ? ' chosen' : ''}`}
                   onClick={() => chooseCell(r,c)} disabled={!started || wallMode || game.winner !== null}>
-                  {occupant >= 0 && <span className={`q-pawn q-pawn-${occupant + 1}`} style={{ '--pawn-color': pawnColors[occupant] } as CSSProperties}><span className="q-pawn-head" /></span>}
+                  {occupant >= 0 && <Pawn3D color={pawnColors[occupant]} player={occupant} />}
                 </button>;
               })}
             </div>

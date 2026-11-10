@@ -88,6 +88,12 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         <p>온라인 대전을 시작하려면 위에서 쿼리도를 선택하고 방을 만드세요. 혼자 조작을 연습할 수도 있어요.</p>
         <button type="button" onClick={() => navigate('/quoridor-preview')}>혼자 연습하기</button>
       </section>
+      <section className="card" aria-labelledby="bomb-pass-preview-title">
+        <h2 id="bomb-pass-preview-title">💣 폭탄 돌리기 · 디자인 미리보기</h2>
+        <p>최대 시간만 정하고, 언제 터질지 모르는 폭탄을 계속 돌려보세요. 현장 말하기와 텍스트 입력을 시험할 수 있어요.</p>
+        <button type="button" onClick={() => navigate('/bomb-pass-preview')}>폭탄 돌리기 체험하기</button>
+        <p className="hint">시뮬레이션용 화면이며 실제 온라인 방은 아직 연결되지 않았습니다.</p>
+      </section>
       <details className="card">
         <summary>홈 화면에 앱처럼 설치하기</summary>
         <p>아이폰: Safari에서 공유 → 홈 화면에 추가</p>

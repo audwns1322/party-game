@@ -110,7 +110,7 @@ export function QuoridorOnline({session,room,me,players,online}:Props) {
         <div className="q-arena-top"><span>ONLINE MATCH · ROUND {String(state?.matchNumber??1).padStart(2,'0')}</span><span className="q-live">● {online?'LIVE SYNC':'RECONNECTING'}</span></div>
         <h2>{game.winner===null?`${playerName(game.currentPlayer)} 차례${yourTurn?' · 내 차례':''}`:`${playerName(game.winner)} 승리!`}</h2>
         <p className="q-message" role="status">{yourTurn?message:'다른 플레이어의 선택을 기다리고 있습니다.'}</p>
-        {state?.turnLimit&&game.winner===null&&<div className={`q-timer${remaining!==null&&remaining<=5?' urgent':''}`} role="timer"><span>TURN TIMER</span><strong>{remaining}초</strong>{state.extended&&<em>연장 중 · 다시 초과하면 턴 넘김</em>}<div className="q-timer-track"><i style={{width:`${Math.min(100,(remaining??0)/state.turnLimit*100)}%`}}/></div></div>}
+        {Boolean(state?.turnLimit)&&game.winner===null&&<div className={`q-timer${remaining!==null&&remaining<=5?' urgent':''}`} role="timer"><span>TURN TIMER</span><strong>{remaining}초</strong>{state?.extended&&<em>연장 중 · 다시 초과하면 턴 넘김</em>}<div className="q-timer-track"><i style={{width:`${Math.min(100,(remaining??0)/(state?.turnLimit??1)*100)}%`}}/></div></div>}
         <div className="q-stage"><div className="q-board"><div className="q-grid">
           {Array.from({length:81},(_,index)=>{const r=Math.floor(index/9),c=index%9;
             const occupant=game.positions.findIndex(p=>p[0]===r&&p[1]===c);

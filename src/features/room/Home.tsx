@@ -37,7 +37,7 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
     <main>
       <span className="badge">PARTY GAME</span>
       <h1>함께 모여,<br />시작하는 즐거움</h1>
-      <p>계정 없이 함께하는 3~15인 파티 게임</p>
+      <p>계정 없이 각자 휴대폰으로 함께하는 온라인 게임</p>
       {!apiConfigured && <p role="alert" className="error">서버 설정(.env.local)이 없어요.</p>}
 
       {rooms.length > 0 && (
@@ -66,6 +66,9 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
             <button type="button" className={gameType==='mafia'?'game-option selected':'game-option'} aria-pressed={gameType==='mafia'} onClick={()=>setGameType('mafia')}>
               <span aria-hidden="true">🌙</span><strong>마피아 게임</strong>
             </button>
+            <button type="button" className={gameType==='quoridor'?'game-option selected':'game-option'} aria-pressed={gameType==='quoridor'} onClick={()=>setGameType('quoridor')}>
+              <span aria-hidden="true">♟️</span><strong>쿼리도 온라인</strong>
+            </button>
           </div>
         </fieldset>}
         {mode === 'join' && (
@@ -81,10 +84,9 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         <button className="primary" disabled={busy}>{busy ? '잠시만요…' : mode === 'create' ? '방 만들기' : '참가하기'}</button>
       </form>
       <section className="card" aria-labelledby="quoridor-preview-title">
-        <h2 id="quoridor-preview-title">쿼리도 3D 미리보기</h2>
-        <p>프리미엄 우드와 모던 네온 테마를 비교하고, 2인·4인 로컬 규칙을 체험할 수 있어요.</p>
-        <button type="button" className="primary" onClick={() => navigate('/quoridor-preview')}>3D 게임판 체험하기</button>
-        <p className="hint">온라인 방 대전은 아직 지원하지 않는 미리보기입니다.</p>
+        <h2 id="quoridor-preview-title">쿼리도 3D 연습판</h2>
+        <p>온라인 대전을 시작하려면 위에서 쿼리도를 선택하고 방을 만드세요. 혼자 조작을 연습할 수도 있어요.</p>
+        <button type="button" onClick={() => navigate('/quoridor-preview')}>혼자 연습하기</button>
       </section>
       <details className="card">
         <summary>홈 화면에 앱처럼 설치하기</summary>

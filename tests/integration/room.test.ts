@@ -43,6 +43,7 @@ describe('database permissions', () => {
       try {
         await expect(db.query('select * from app_private.rooms')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.players')).rejects.toThrow(/permission denied/);
+        await expect(db.query('select * from app_private.quoridor_matches')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_round_players')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_night_actions')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_day_votes')).rejects.toThrow(/permission denied/);
@@ -51,10 +52,25 @@ describe('database permissions', () => {
         await expect(db.query("select public.player_recover('000000', repeat('a',64), repeat('b',64), repeat('c',64))")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_snapshot(repeat('a',64), gen_random_uuid())")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.room_command(repeat('a',64), gen_random_uuid(), 'leave', '{}', 1)")).rejects.toThrow(/permission denied/);
+        await expect(db.query("select public.quoridor_get(repeat('a',64), gen_random_uuid())")).rejects.toThrow(/permission denied/);
+        await expect(db.query("select public.quoridor_commit(repeat('a',64), gen_random_uuid(), 1, '{}')")).rejects.toThrow(/permission denied/);
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(19);
+    expect(rows[0].n).toBe(20);
+  });
+});
+
+describe('quoridor room isolation', () => {
+  it('creates an online match, permits four seats, and rejects a fifth',async()=>{
+    const host=(await (await api.create(post({nickname:'쿼리도방장',game_type:'quoridor'}))).json()) as Session;
+    const view=(await rpc('quoridor_get',{p_credential_hash:await (await import('../../supabase/functions/_shared/security')).hashToken(host.token),p_room:host.room_id})) as {state:{status:string;playerCount:number}};
+    expect(view.state).toMatchObject({status:'lobby',playerCount:2});
+    for(let i=1;i<=3;i++)expect((await join(host.code,`추가참가자${i}`)).status).toBe(200);
+    expect((await join(host.code,'다섯째참가자')).status).toBe(409);
+    const normal=await create('일반방장');
+    const other=(await (await snapshot(normal,normal.room_id)).json()) as {room:{game_type:string}};
+    expect(other.room.game_type).toBe('liar');
   });
 });
 

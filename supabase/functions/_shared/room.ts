@@ -146,7 +146,7 @@ export function createRoomHandler(rpc: Rpc, broadcast: Broadcast) {
     const input = await body(request);
     const nickname = normalizeNickname(input.nickname);
     const gameType = input.game_type ?? 'liar';
-    if (gameType !== 'liar' && gameType !== 'mafia') throw new ApiError('INVALID_REQUEST');
+    if (gameType !== 'liar' && gameType !== 'mafia' && gameType !== 'quoridor') throw new ApiError('INVALID_REQUEST');
     await limit(rpc, await ipBucket(request, 'create'), LIMITS.createPerIp);
     return issue(async (p_credential_hash, p_recovery_hash) => await rpc('room_create', { p_nickname: nickname.display, p_nickname_key: nickname.key, p_credential_hash, p_recovery_hash, p_game_type: gameType }) as Issued, broadcast);
   });

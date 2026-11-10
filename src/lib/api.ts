@@ -1,7 +1,7 @@
 // Browser API client for the room Edge Functions. Credentials go in headers only.
 export type Session = { room_id: string; code: string; player_id: string; token: string };
 export type Issued = Session & { recovery_code: string };
-export type GameType = 'liar' | 'mafia';
+export type GameType = 'liar' | 'mafia' | 'quoridor';
 export const MAFIA_ROLES = ['mafia', 'spy', 'citizen', 'police', 'doctor', 'journalist', 'traitor'] as const;
 export type MafiaRole = typeof MAFIA_ROLES[number];
 export type MafiaRoles = Record<MafiaRole, number>;
@@ -87,6 +87,8 @@ export const api = {
     call<{ version: number }>('room-command', json({ room_id: s.room_id, action, payload, expected_version, request_id: crypto.randomUUID() }, s.token)),
   game: (s: Session, body: { action: string; payload: object; expected_version: number; expected_phase: GamePhase; request_id: string }) =>
     call<{ version: number }>('game-command', json({ room_id: s.room_id, ...body }, s.token)),
+  quoridor: <T>(s: Session, action: string, expected_version?: number, payload: object = {}) =>
+    call<T>('quoridor-command', json({ room_id: s.room_id, action, expected_version, payload }, s.token)),
 };
 
 const MESSAGES: Record<string, string> = {
@@ -106,6 +108,9 @@ const MESSAGES: Record<string, string> = {
   PHASE_CONFLICT: '게임 단계가 바뀌었어요. 최신 화면에서 다시 시도해 주세요.',
   REQUEST_CONFLICT: '요청 내용이 달라졌어요. 최신 상태를 확인해 주세요.',
   PLAYER_COUNT: '게임은 3~15명일 때 시작할 수 있어요.',
+  INVALID_MOVE: '선택한 칸으로 이동할 수 없어요.',
+  INVALID_WALL: '선택한 위치에 벽을 놓을 수 없어요.',
+  UNDO_UNAVAILABLE: '지금은 무르기를 사용할 수 없어요.',
   PLAYERS_OFFLINE: '자리 비움인 참가자가 있어요. 모두 돌아온 후 시작해 주세요.',
   ROUND_ACTIVE: '현재 판을 먼저 취소해 주세요.',
   ROUND_PAUSED: '참가자의 재접속을 기다리며 잠시 멈췄어요.',

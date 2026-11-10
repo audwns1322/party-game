@@ -6,6 +6,7 @@ import { clearSession, type StoredSession } from '../../lib/session';
 import { mafiaNarration } from './mafiaNarration';
 import { useRoom } from './useRoom';
 import { RoundPanel } from './RoundPanel';
+import { QuoridorOnline } from '../quoridor/QuoridorOnline';
 
 const MAX_PLAYERS = 15;
 const MIN_PLAYERS = 3;
@@ -265,6 +266,7 @@ export function Lobby({ session }: { session: StoredSession }) {
   }
 
   const { room, me, players } = snapshot;
+  if (room.game_type === 'quoridor') return <QuoridorOnline session={session} room={room} me={me} players={players} online={online} />;
   const round = snapshot.round;
   const play = async (action: string,payload?: object) => {
     setBusy(true); setError('');

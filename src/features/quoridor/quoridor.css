@@ -33,6 +33,9 @@
 .q-timer-setup label{font-size:11px;color:var(--q-muted);white-space:nowrap}
 .q-timer-setup select{min-width:90px;border:0;border-radius:7px;padding:8px;background:var(--q-card);color:var(--q-text);font:inherit;font-size:12px}
 .q-timer-setup select option{background:var(--q-card)}
+.q-undo-setup{display:flex;align-items:center;gap:7px;background:var(--q-panel);border:1px solid var(--q-line);border-radius:12px;padding:9px 12px;color:var(--q-text);font-size:11px;cursor:pointer;white-space:nowrap}
+.q-undo-setup input{accent-color:var(--q-accent);width:15px;height:15px;margin:0;cursor:pointer}
+.q-undo-setup:has(input:disabled){opacity:.65;cursor:default}
 .q-start{border:0;border-radius:8px;padding:10px 14px;background:var(--q-accent);color:#1b2732;font-size:12px;font-weight:800}
 .q-segment button:disabled{opacity:.5;cursor:not-allowed}
 .q-action-bar button:disabled{opacity:.5;cursor:not-allowed}

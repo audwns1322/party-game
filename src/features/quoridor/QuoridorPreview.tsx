@@ -22,6 +22,9 @@ export function QuoridorPreview() {
   const [turnLimit, setTurnLimit] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [extended, setExtended] = useState(false);
+  const [undoEnabled, setUndoEnabled] = useState(false);
+  const [undoUsed, setUndoUsed] = useState<boolean[]>([false, false]);
+  const [lastAction, setLastAction] = useState<{ before: QuoridorGame; player: number } | null>(null);
   const moves = started && game.winner === null && !wallMode ? legalPawnMoves(game) : [];
   const wallLegal = pending?.type === 'wall' && canPlaceWall(game, pending.wall);
   const ready = pending?.type === 'move' || wallLegal;
@@ -30,12 +33,14 @@ export function QuoridorPreview() {
     setGame(createQuoridorGame(count));
     setPending(null); setWallMode(false);
     setStarted(false); setExtended(false); setSecondsLeft(0);
+    setUndoUsed(Array(count).fill(false)); setLastAction(null);
     setMessage('인원과 타이머를 설정한 뒤 게임을 시작하세요.');
   }
 
   function startGame() {
     setGame(createQuoridorGame(game.playerCount));
     setPending(null); setWallMode(false); setExtended(false);
+    setUndoUsed(Array(game.playerCount).fill(false)); setLastAction(null);
     setSecondsLeft(turnLimit); setStarted(true);
     setMessage(turnLimit ? `${turnLimit}초 제한으로 시작합니다. 첫 시간 초과 시 한 번 연장됩니다.` : '무제한 모드로 시작합니다. 움직일 칸을 선택하세요.');
   }
@@ -50,6 +55,7 @@ export function QuoridorPreview() {
       } else {
         setGame(previous => applyQuoridorAction(previous, { type: 'skip' }));
         setPending(null); setWallMode(false); setExtended(false); setSecondsLeft(turnLimit);
+        setLastAction(null);
         setMessage('두 번째 시간 초과로 턴이 자동으로 넘어갔습니다.');
       }
     }, 1000);
@@ -86,12 +92,23 @@ export function QuoridorPreview() {
     if (!pending || !ready) return;
     try {
       const next = applyQuoridorAction(game, pending);
+      setLastAction(undoEnabled ? { before: game, player: game.currentPlayer } : null);
       setGame(next); setPending(null);
       setExtended(false); setSecondsLeft(turnLimit);
       setMessage(next.winner === null ? '이동이 완료됐습니다. 다음 플레이어 차례입니다.' : `플레이어 ${next.winner + 1} 승리!`);
     } catch {
       setPending(null); setMessage('게임 상태가 변경됐습니다. 위치를 다시 선택하세요.');
     }
+  }
+
+  function undoLastAction() {
+    if (!undoEnabled || !lastAction || undoUsed[lastAction.player] || game.winner !== null) return;
+    const player = lastAction.player;
+    setGame(lastAction.before);
+    setUndoUsed(previous => previous.map((used, index) => index === player ? true : used));
+    setLastAction(null); setPending(null); setWallMode(false);
+    setExtended(false); setSecondsLeft(turnLimit);
+    setMessage(`PLAYER 0${player + 1}의 직전 수를 무르고 차례를 되돌렸습니다. (무르기 사용 완료)`);
   }
 
   function toggleWallMode() {
@@ -127,6 +144,7 @@ export function QuoridorPreview() {
         </select>
         {!started && <button type="button" className="q-start" onClick={startGame}>▶ 게임 시작</button>}
       </div>
+      <label className="q-undo-setup"><input type="checkbox" checked={undoEnabled} disabled={started} onChange={event => setUndoEnabled(event.target.checked)} /> 플레이어당 무르기 1회 허용</label>
     </div>
 
     <div className="q-layout">
@@ -184,6 +202,7 @@ export function QuoridorPreview() {
 
         <div className="q-action-bar">
           <button type="button" disabled={!started || game.winner !== null} className={wallMode ? 'active' : ''} onClick={toggleWallMode}>▰ {wallMode ? '말 이동으로' : '벽 설치'}</button>
+          {undoEnabled && <button type="button" disabled={!lastAction || undoUsed[lastAction.player] || game.winner !== null} onClick={undoLastAction}>↶ 직전 수 무르기</button>}
           {wallMode && <div className="q-orientations">
             <button type="button" className={!vertical ? 'active' : ''} onClick={() => changeOrientation(false)}>━ 가로</button>
             <button type="button" className={vertical ? 'active' : ''} onClick={() => changeOrientation(true)}>┃ 세로</button>
@@ -200,13 +219,14 @@ export function QuoridorPreview() {
             <div><dt>게임 모드</dt><dd>{game.playerCount} PLAYERS</dd></div>
             <div><dt>현재 차례</dt><dd>{game.winner === null ? `PLAYER 0${game.currentPlayer+1}` : 'GAME OVER'}</dd></div>
             <div><dt>턴 제한</dt><dd>{turnLimit ? `${turnLimit}초` : '무제한'}</dd></div>
+            <div><dt>무르기</dt><dd>{undoEnabled ? '플레이어당 1회' : '사용 안 함'}</dd></div>
             <div><dt>진행 상태</dt><dd>{!started ? '시작 대기' : extended ? '1회 연장 중' : '진행 중'}</dd></div>
             <div><dt>진행한 턴</dt><dd>{game.turnNumber - 1}</dd></div>
             <div><dt>남은 벽</dt><dd>{game.wallsRemaining[game.currentPlayer]} / {game.playerCount === 2 ? 10 : 5}</dd></div>
           </dl><div className="q-wall-stock">{Array.from({length:game.playerCount===2?10:5},(_,i)=><span key={i} className={i>=game.wallsRemaining[game.currentPlayer]?'used':''}/>)}</div>
         </section>
         <section className="q-side-card"><h3>HOW TO PLAY</h3>
-          <ol><li>인원과 제한시간을 설정하고 시작하세요.</li><li>칸 또는 벽 위치 선택 후 게임판 아래에서 <strong>✓ 확정</strong>하세요.</li><li>첫 시간 초과 시 같은 시간이 연장되고, 두 번째는 턴을 넘깁니다.</li></ol>
+          <ol><li>인원·제한시간·무르기를 설정하고 시작하세요.</li><li>칸 또는 벽 위치 선택 후 게임판 아래에서 <strong>✓ 확정</strong>하세요.</li><li>첫 시간 초과 시 같은 시간이 연장되고, 두 번째는 턴을 넘깁니다.</li><li>무르기는 상대가 다음 수를 두기 전, 각 플레이어 1회만 사용할 수 있습니다.</li></ol>
           <div className="q-tip"><span>✦</span> 설치 전 반투명 벽으로 위치를 미리 볼 수 있습니다.</div>
           <button type="button" className="q-reset" onClick={() => reset()}>↺ 게임판 초기화</button>
         </section>

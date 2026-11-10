@@ -25,7 +25,8 @@
     "@supabase/supabase-js": "2.118.0",
     "qrcode": "1.5.4",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",
@@ -34,6 +35,7 @@
     "@types/qrcode": "1.5.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "6.1.2",
     "deno": "2.9.6",
     "eslint": "10.13.0",

@@ -93,9 +93,9 @@ export function QuoridorPreview() {
     try {
       const next = applyQuoridorAction(game, pending);
       setLastAction(undoEnabled ? { before: game, player: game.currentPlayer } : null);
-      setGame(next); setPending(null);
+      setGame(next); setPending(null); setWallMode(false);
       setExtended(false); setSecondsLeft(turnLimit);
-      setMessage(next.winner === null ? '이동이 완료됐습니다. 다음 플레이어 차례입니다.' : `플레이어 ${next.winner + 1} 승리!`);
+      setMessage(next.winner === null ? (pending.type === 'wall' ? '벽 설치 완료! 다음 플레이어의 말 이동 차례입니다.' : '이동이 완료됐습니다. 다음 플레이어 차례입니다.') : `플레이어 ${next.winner + 1} 승리!`);
     } catch {
       setPending(null); setMessage('게임 상태가 변경됐습니다. 위치를 다시 선택하세요.');
     }

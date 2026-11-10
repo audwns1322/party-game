@@ -98,3 +98,43 @@ main.quoridor{width:100%;max-width:none;margin:0;padding:22px max(16px,calc((100
 .q-online-winner{font-size:19px!important;font-weight:800}
 .q-online-error{padding:12px 15px;background:#7b2629;color:#fff;border-radius:9px}
 @media(max-width:580px){.q-online-lobby{padding:18px 14px}.q-online-config{flex-direction:column;align-items:stretch}.q-online-config label{justify-content:space-between}}
+
+/* Quoridor board material pass: beveled tiles, visible sidewall, and grounded pieces. */
+.q-stage{perspective:950px;padding-bottom:42px}
+.q-board{
+  border:10px solid var(--q-board);
+  border-radius:16px;
+  background:linear-gradient(145deg,#ffffff28,transparent 24%),var(--q-board);
+  transform:rotateX(13deg);
+  box-shadow:0 4px 0 #d0a072,0 11px 0 #734c30,0 21px 0 #3a281e,
+    0 34px 0 #261c18,0 51px 35px #000a,inset 0 0 0 2px #ffffff30;
+}
+.q-board:after{content:'';position:absolute;inset:-9px;border-radius:13px;border:2px solid #ffffff28;pointer-events:none;z-index:11}
+.q-cell{background:linear-gradient(145deg,#fff6d326 0%,transparent 37%,#42230e13 100%),var(--q-tile1);
+  box-shadow:inset 2px 2px 0 #ffe2ac36,inset -2px -2px 0 #4b321d42,0 3px 0 var(--q-tile-edge);border-radius:3px}
+.q-cell:nth-child(even){background:linear-gradient(145deg,#ffffff26,transparent 38%,#311f1214),var(--q-tile2)}
+.quoridor.neon .q-board{box-shadow:0 4px 0 #3a6189,0 11px 0 #112c52,0 21px 0 #071b37,
+  0 34px 0 #030e20,0 48px 40px #000c,0 0 36px #4de5fc30}
+.quoridor.neon .q-cell{box-shadow:inset 2px 2px 0 #a0ddff2f,inset -2px -2px 0 #07152c99,0 3px 0 var(--q-tile-edge)}
+
+/* Slim wall planks sit precisely along the cell boundaries. The shorter drop
+   shadow reads as depth without masking a neighbouring pawn. */
+.q-wall.horizontal{width:21.75%;height:2.85%}
+.q-wall.vertical{width:2.85%;height:21.75%}
+.q-wall{border-radius:2px;box-shadow:0 2px 0 #6b4b2e,0 5px 0 #50341f,0 7px 8px #0008;filter:drop-shadow(1px 2px 1px #0005)}
+.q-wall:before{height:18%;top:3%}
+.q-wall:after{bottom:-3px;height:3px}
+.quoridor.neon .q-wall{box-shadow:0 2px 0 #55378c,0 5px 0 #302052,0 8px 10px #0009,0 0 10px #ad8aff70}
+
+/* Both WebGL and CSS fallback pawns occupy less than one tile visually. */
+.q-pawn{width:71%;height:97%;margin-bottom:5%;transform:translateY(-2px)}
+.q-pawn-head{top:-19%;left:9%;width:82%}
+.q-pawn canvas{left:-48%;bottom:-17%;width:195%;height:163%}
+@media(max-width:580px){
+  .q-stage{padding:12px 8px 38px}
+  .q-board{border-width:7px;transform:rotateX(11deg);box-shadow:0 3px 0 #ca9867,0 8px 0 #70472a,0 15px 0 #39261a,0 24px 0 #241913,0 36px 24px #0009}
+  .quoridor.neon .q-board{box-shadow:0 3px 0 #3a6189,0 8px 0 #112c52,0 15px 0 #071b37,0 24px 0 #030e20,0 36px 28px #000b}
+  .q-cell{box-shadow:inset 1px 1px 0 #ffe2ac40,inset -1px -1px 0 #4b321d40,0 2px 0 var(--q-tile-edge)}
+  .q-pawn{width:70%;height:95%;margin-bottom:4%;transform:translateY(-1px)}
+  .q-pawn canvas{left:-45%;bottom:-16%;width:190%;height:158%}
+}

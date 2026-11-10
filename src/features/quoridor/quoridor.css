@@ -68,3 +68,14 @@
 .q-pawn.q-model-ready{background:transparent;box-shadow:none;border:none;filter:none;overflow:visible}
 .q-pawn.q-model-ready:before,.q-pawn.q-model-ready .q-pawn-head{display:none}
 .q-pawn.q-model-ready canvas{opacity:1}
+
+/* Isolate Quoridor from the Liar/Mafia app's narrow-screen global main/form rules. */
+main.quoridor{width:100%;max-width:none;margin:0;padding:22px max(16px,calc((100vw - 1170px)/2)) 52px}
+.quoridor button{width:auto;min-height:0;margin-top:0}
+.quoridor .q-cell{width:100%;height:100%}
+.quoridor .q-hotspot{width:35px;height:35px}
+.quoridor label{margin:0}
+.quoridor .q-timer-setup select{width:auto;min-height:0;margin:0}
+.quoridor .q-reset{width:100%}
+@media(max-width:580px){main.quoridor{padding:17px 12px 38px}.quoridor .q-hotspot{width:34px;height:34px}}
+@media(max-width:360px){.quoridor .q-hotspot{width:31px;height:31px}}

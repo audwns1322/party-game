@@ -1,4 +1,4 @@
-import { BOMB_TOPICS, normalizeBombAnswer } from './demoEngine';
+import { BOMB_TOPICS, normalizeBombAnswer } from './demoEngine.ts';
 
 export type BombStatus = 'lobby' | 'countdown' | 'playing' | 'exploded' | 'finished';
 export type BombMode = 'voice' | 'text';

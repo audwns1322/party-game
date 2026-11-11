@@ -3,9 +3,10 @@
 ## 폭탄 돌리기 정식 게임화 (2026-11-11, `codex/bomb-pass-mvp`)
 - 사용자 결정: **기존 main 직접 변경 금지**. 현재 브랜치에서 충분히 테스트한 후 승인받아 병합한다. 현장 한 대의 폰(`/bomb-pass/local`)과 온라인 각자 폰(홈의 폭탄 돌리기 방 생성) 두 방식을 지원한다.
 - 기존 Room/QR/복구 코드/Realtime 알림을 재사용하고 온라인은 서버가 보관하는 비공개 무작위 폭발 시각, 3초 카운트다운, 최대 3분, 순서대로 돌리기/랜덤 지목, 말하기+버튼/텍스트, 3~15명, 방장 다음 라운드/종료, 목숨·탈락 없는 무제한 진행을 지원한다. 주제 65개, Web Audio 폭발 효과음(브라우저 최초 터치 활성화 필요).
-- 신규 `20261111023656_bomb_pass_online.sql`: 기존 룸 유형 확장, RLS 켠 `app_private.bomb_matches`(비공개 타이머), 자격증명/버전/폭발 제한 검사 `bomb_get`/`bomb_commit`(service_role 전용). 기존 라이어·마피아·쿼리도 생성/참여 동작은 유지. 신규 `bomb-command` Edge는 비밀 타이머 없이 본인 자격증명으로 상태를 조회/명령한다.
+- 신규 `20261111030640_bomb_pass_online.sql`: 기존 룸 유형 확장, RLS 켠 `app_private.bomb_matches`(비공개 타이머), 자격증명/버전/폭발 제한 검사 `bomb_get`/`bomb_commit`(service_role 전용). 기존 라이어·마피아·쿼리도 생성/참여 동작은 유지. 신규 `bomb-command` Edge는 비밀 타이머 없이 본인 자격증명으로 상태를 조회/명령한다. Supabase 적용 시 부여된 이력 버전과 파일명을 일치시킴.
 - 로컬 60개 주제 단위/통합, 비밀 타이머 비노출·권한·동시 버전 충돌·중복 답변·폭발 정산 테스트, 이전 게임 SQL 회귀 검사 추가. `npm run test`, `npm run test:sql`, `npm run typecheck:edge`, `npm run build`, 타입/lint 실행 및 결과는 커밋/최종 보고 참조.
-- 2026-11-11 개발 Supabase 마이그레이션 목록 확인: 최신 `20261110020121 quoridor_online`까지 적용, 폭탄 마이그레이션 미적용; 유효한 `open` 방 0개. **프로덕션 main 병합 및 외부 출시 미실행**. 브랜치 배포와 DB/Edge 적용 후 실기기 3대 검증 및 CORS 허용 출처 확인 필요.
+- 2026-11-11 사용자 승인 후 공유 Supabase에 `20261111030640 bomb_pass_online` 적용 완료. 적용 전 유효한 `open` 방 0개, 신규 테이블 RLS 및 익명 RPC 호출 금지 확인. `bomb-command` Edge v1과 `room-create` v6 배포 ACTIVE. 기존 룸 API 및 main 병합 미실행. GitHub 브랜치 Vercel 빌드 success.
+- **실제 온라인 브라우저 검증 보류**: Vercel Preview는 로그인 보호로 별도 클라우드 브라우저에서 접근 불가. 공통 서버 CORS 기본 허용 목록에는 개발 브랜치 Preview 도메인이 없어서, 추가 `APP_ALLOWED_ORIGINS` 구성 또는 기존 `room-join`/`room-snapshot`/`room-command` 함수의 한정된 CORS 변경이 필요할 수 있음. 이번 승인 범위에 없는 기존 함수 재배포는 하지 않는다. 정상 접속 가능한 환경에서 현장/온라인 3기기·효과음·재접속 확인 후 main 병합 여부 결정.
 - shortcut: 모바일 백그라운드 절전 시 타이머는 서버를 기준으로 정산되지만 폭발 화면·효과음 재생이 지연될 수 있다. 실기기 3대 재접속/음향 검증 후 확정.
 
 ## 폭탄 돌리기 모바일 UI 미리보기 (2026-11-10, 브랜치 미병합)

@@ -44,6 +44,7 @@ describe('database permissions', () => {
         await expect(db.query('select * from app_private.rooms')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.players')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.quoridor_matches')).rejects.toThrow(/permission denied/);
+        await expect(db.query('select * from app_private.bomb_matches')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_round_players')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_night_actions')).rejects.toThrow(/permission denied/);
         await expect(db.query('select * from app_private.mafia_day_votes')).rejects.toThrow(/permission denied/);
@@ -54,10 +55,12 @@ describe('database permissions', () => {
         await expect(db.query("select public.room_command(repeat('a',64), gen_random_uuid(), 'leave', '{}', 1)")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.quoridor_get(repeat('a',64), gen_random_uuid())")).rejects.toThrow(/permission denied/);
         await expect(db.query("select public.quoridor_commit(repeat('a',64), gen_random_uuid(), 1, '{}')")).rejects.toThrow(/permission denied/);
+        await expect(db.query("select public.bomb_get(repeat('a',64), gen_random_uuid())")).rejects.toThrow(/permission denied/);
+        await expect(db.query("select public.bomb_commit(repeat('a',64), gen_random_uuid(), 1, '{}', '{}')")).rejects.toThrow(/permission denied/);
       } finally { await db.exec('reset role'); }
     }
     const { rows } = await db.query<{ n: number }>("select count(*)::int n from pg_class where relnamespace='app_private'::regnamespace and relkind='r' and relrowsecurity");
-    expect(rows[0].n).toBe(20);
+    expect(rows[0].n).toBe(21);
   });
 });
 

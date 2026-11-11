@@ -17,13 +17,17 @@ function formatDuration(seconds: number) {
   return `${minutes}분${remaining ? ` ${remaining}초` : ''}`;
 }
 
-export function BombPassPreview() {
+export function BombPassPreview({ local = false }: { local?: boolean }) {
   const [phase, setPhase] = useState<Phase>('ready');
   const [mode, setMode] = useState<AnswerMode>('voice');
   const [turnStyle, setTurnStyle] = useState<TurnStyle>('pass');
   const [maxSeconds, setMaxSeconds] = useState(45);
   const [playerCount, setPlayerCount] = useState(5);
+  const [localNames, setLocalNames] = useState(() => DEMO_PLAYERS.slice(0,5));
+  const [namesDraft, setNamesDraft] = useState(() => DEMO_PLAYERS.slice(0,5).join('\n'));
+  const [nameError, setNameError] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [audioReady, setAudioReady] = useState(false);
   const [round, setRound] = useState(1);
   const [holder, setHolder] = useState(0);
   const [explodedHolder, setExplodedHolder] = useState<number | null>(null);
@@ -38,13 +42,14 @@ export function BombPassPreview() {
   const audioContext = useRef<AudioContext | null>(null);
   const bombDeadline = useRef<number | null>(null);
   const startedAt = useRef<number | null>(null);
-  const players = DEMO_PLAYERS.slice(0, playerCount);
+  const players = local ? localNames : DEMO_PLAYERS.slice(0, playerCount);
   const active = phase !== 'ready' && phase !== 'finished';
   const topic = BOMB_TOPICS[topicIndex];
 
   function unlockAudio() {
+    if (typeof AudioContext === 'undefined') { setSoundEnabled(false); setFeedback('이 브라우저는 효과음을 지원하지 않아요.'); return; }
     if (!audioContext.current) audioContext.current = new AudioContext();
-    void audioContext.current.resume().catch(() => undefined);
+    void audioContext.current.resume().then(() => setAudioReady(true)).catch(() => setAudioReady(false));
   }
 
   useEffect(() => () => { void audioContext.current?.close(); }, []);
@@ -79,10 +84,23 @@ export function BombPassPreview() {
   }, [active]);
 
   function startGame() {
+    let count = playerCount;
+    if (local) {
+      const names = namesDraft.split(/[\n,]/).map(item=>item.normalize('NFC').trim()).filter(Boolean);
+      if (names.length < 3 || names.length > 15 || names.some(name=>[...name].length<2||[...name].length>16||/[\p{Cc}\p{Cf}\p{Cs}]/u.test(name)) ||
+        new Set(names.map(name=>name.toLocaleLowerCase('ko'))).size !== names.length) {
+        setNameError('서로 다른 이름을 3~15명, 각 2~16자로 입력해 주세요.');
+        return;
+      }
+      setLocalNames(names);
+      setPlayerCount(names.length);
+      setNameError('');
+      count = names.length;
+    }
     if (soundEnabled) unlockAudio();
     setRound(1);
     setTopicIndex(0);
-    setHolder(turnStyle === 'random' ? randomBombHolder(null, playerCount) : 0);
+    setHolder(turnStyle === 'random' ? randomBombHolder(null, count) : 0);
     setExplodedHolder(null);
     setExplosionCounts(Array(DEMO_PLAYERS.length).fill(0));
     setAnswers([]);
@@ -136,7 +154,7 @@ export function BombPassPreview() {
     <div className="bp-shell">
       <header className="bp-header">
         <button type="button" className="bp-back" onClick={() => navigate('/')} aria-label="Party Game 홈으로 이동">← <span>PARTY GAME</span></button>
-        <span className="bp-preview-tag">● INTERACTIVE PREVIEW</span>
+        <span className="bp-preview-tag">{local ? '● LOCAL PLAY' : '● INTERACTIVE PREVIEW'}</span>
       </header>
 
       <div className="bp-title-area">
@@ -149,8 +167,8 @@ export function BombPassPreview() {
         <section className="bp-main-card" aria-label="폭탄 돌리기 게임 미리보기">
           <div className="bp-stage-top">
             <span className="bp-overline">{phase === 'ready' ? 'READY TO PLAY' : phase === 'finished' ? 'SESSION COMPLETE' : `ROUND ${String(round).padStart(2, '0')}`}</span>
-            <button type="button" className="bp-sound" aria-pressed={soundEnabled} onClick={() => { if (!soundEnabled) unlockAudio(); setSoundEnabled(value => !value); }}>
-              {soundEnabled ? '🔊 소리 켜짐' : '🔇 음소거'}
+            <button type="button" className="bp-sound" aria-pressed={soundEnabled&&audioReady} onClick={() => { if (!audioReady) { setSoundEnabled(true); unlockAudio(); } else setSoundEnabled(value => !value); }}>
+              {!audioReady ? '🔊 효과음 켜기' : soundEnabled ? '🔊 소리 켜짐' : '🔇 음소거'}
             </button>
           </div>
 
@@ -187,18 +205,20 @@ export function BombPassPreview() {
               </ol>
               <p className="bp-howto-footer">🎉 탈락 없이 계속 플레이! <span>언제 터질지는 아무도 몰라.</span></p>
             </section>
+            {local&&<div><label className="bp-local-name-label" htmlFor="bp-local-names">참가자 이름 · 한 줄에 한 명</label><textarea className="bp-local-names" id="bp-local-names" value={namesDraft} onChange={e=>{setNamesDraft(e.target.value);setNameError('');}} placeholder="명준&#10;지민&#10;서연"/>{nameError&&<p className="bp-local-error" role="alert">{nameError}</p>}<p className="bp-local-mode-note">📱 한 대의 휴대폰을 실제로 돌려가며 플레이합니다. 답을 말한 뒤 다음 사람에게 넘겨 주세요.</p></div>}
             <div className="bp-turn-style" role="group" aria-labelledby="bp-style-label">
               <span className="bp-field-label" id="bp-style-label">진행 방식</span>
               <div className="bp-toggle bp-style-toggle"><button type="button" className={turnStyle === 'pass' ? 'selected' : ''} aria-pressed={turnStyle === 'pass'} onClick={() => setTurnStyle('pass')}>📱 순서대로 돌리기</button><button type="button" className={turnStyle === 'random' ? 'selected' : ''} aria-pressed={turnStyle === 'random'} onClick={() => setTurnStyle('random')}>🎲 랜덤 지목</button></div>
-              <p className="bp-style-description">{turnStyle === 'random' ? '답할 때마다 다른 사람이 무작위로 지목돼요. 타이머는 멈추지 않습니다. (현재는 1기기 시뮬레이션)' : '한 대의 폰을 돌려 쓰는 현장 모드예요. 답하고 다음 사람에게 넘겨 주세요.'}</p>
+              <p className="bp-style-description">{turnStyle === 'random' ? '답할 때마다 다른 사람이 무작위로 지목돼요. 타이머는 멈추지 않습니다.' : '한 대의 폰을 돌려 쓰는 현장 모드예요. 답하고 다음 사람에게 넘겨 주세요.'}</p>
             </div>
             <div className="bp-fields">
               <div><span className="bp-field-label" id="bp-mode-label">답변 방식</span><div className="bp-toggle" role="group" aria-labelledby="bp-mode-label"><button type="button" aria-pressed={mode === 'voice'} className={mode === 'voice' ? 'selected' : ''} onClick={() => setMode('voice')}>🎙️ 말하기</button><button type="button" aria-pressed={mode === 'text'} className={mode === 'text' ? 'selected' : ''} onClick={() => setMode('text')}>⌨️ 텍스트</button></div></div>
               <div><label htmlFor="bp-max">최대 폭발 시간</label><select id="bp-max" value={maxSeconds} onChange={event => setMaxSeconds(Number(event.target.value))}>{maxOptions.map(value => <option key={value} value={value}>최대 {formatDuration(value)}</option>)}</select></div>
-              <div><label htmlFor="bp-count">참가 인원 (데모)</label><select id="bp-count" value={playerCount} onChange={event => setPlayerCount(Number(event.target.value))}>{[3, 4, 5, 6, 8, 10, 12, 15].map(value => <option key={value} value={value}>{value}명</option>)}</select></div>
+              {!local&&<div><label htmlFor="bp-count">참가 인원 (데모)</label><select id="bp-count" value={playerCount} onChange={event => setPlayerCount(Number(event.target.value))}>{[3, 4, 5, 6, 8, 10, 12, 15].map(value => <option key={value} value={value}>{value}명</option>)}</select></div>}
             </div>
+            {!audioReady&&<p className="bp-online-summary">🔊 폭탄 소리를 들으려면 위의 ‘효과음 켜기’를 한 번 눌러 주세요.</p>}
             <button type="button" className="bp-main-button" onClick={startGame}>게임 시작하기 <span>→</span></button>
-            <small className="bp-note">📱 지금은 휴대폰 한 대로 체험하는 데모예요. 여러 기기 연결은 아직 지원하지 않아요.</small>
+            <small className="bp-note">{local ? '현장 모드는 이 기기에서만 동작합니다. 온라인 게임은 홈에서 방을 만들어 주세요.' : '📱 지금은 휴대폰 한 대로 체험하는 데모예요. 여러 기기 연결은 아직 지원하지 않아요.'}</small>
             <small className="bp-note bp-time-note">폭발 시점은 완전 랜덤 · 시작 직후에도 터질 수 있어요!</small>
           </div>}
 
@@ -220,7 +240,7 @@ export function BombPassPreview() {
           <section className="bp-side-panel">
             <div className="bp-panel-title"><span>PLAYERS</span><b>{playerCount}명 참가</b></div>
             <div className="bp-players">{players.map((player, index) => <div key={player} className={`bp-player${phase === 'playing' && holder === index ? ' holding' : ''}`}>
-              <span className="bp-avatar">{player.slice(0, 1)}</span><span className="bp-player-name">{player}{index === 0 && <small>방장 · 데모</small>}</span><span className="bp-player-stat">💥 {explosionCounts[index]}</span>
+              <span className="bp-avatar">{player.slice(0, 1)}</span><span className="bp-player-name">{player}{index === 0 && <small>{local?'진행자':'방장 · 데모'}</small>}</span><span className="bp-player-stat">💥 {explosionCounts[index]}</span>
             </div>)}</div>
             {active && <button type="button" className="bp-end" onClick={() => setConfirmStop(true)}>■ 게임 종료하기</button>}
           </section>
@@ -230,7 +250,7 @@ export function BombPassPreview() {
       </div>
 
       {confirmStop && <div className="bp-modal-backdrop" role="presentation"><div className="bp-modal" role="dialog" aria-modal="true" aria-labelledby="bp-stop-title"><h2 id="bp-stop-title">게임을 종료할까요?</h2><p>현재 폭탄은 취소하고 지금까지의 폭발 기록을 보여드려요.</p><div><button type="button" onClick={() => setConfirmStop(false)}>계속 플레이</button><button type="button" className="bp-confirm" onClick={finishGame}>종료하기</button></div></div></div>}
-      <p className="bp-disclaimer">디자인·동작 확인용 로컬 미리보기입니다. 현재 화면의 인원과 폭발 타이머는 시뮬레이션이며, 실제 서버 판정·온라인 방·재접속 기능은 아직 연결되지 않았습니다.</p>
+      <p className="bp-disclaimer">{local ? '현장 모드는 이 휴대폰에서 실행됩니다. 새로고침하면 진행 중인 게임이 초기화되므로 화면을 닫지 마세요.' : '디자인·동작 확인용 로컬 미리보기입니다. 현재 화면의 인원과 폭발 타이머는 시뮬레이션이며, 실제 서버 판정·온라인 방·재접속 기능은 아직 연결되지 않았습니다.'}</p>
     </div>
   </main>;
 }

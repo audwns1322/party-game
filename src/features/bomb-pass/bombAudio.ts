@@ -37,3 +37,18 @@ export function playBombExplosion(context: AudioContext) {
   bass.start(now);
   bass.stop(now + 0.6);
 }
+
+/** Short, non-musical turn cue, separate from the explosion. */
+export function playBombTurn(context: AudioContext) {
+  if (context.state !== 'running') return;
+  const now=context.currentTime;
+  for (const [offset,frequency] of [[0,680],[0.11,980]]) {
+    const tone=context.createOscillator();
+    const gain=context.createGain();
+    tone.type='triangle';tone.frequency.value=frequency;
+    gain.gain.setValueAtTime(0.0001,now+offset);
+    gain.gain.exponentialRampToValueAtTime(0.13,now+offset+0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001,now+offset+0.09);
+    tone.connect(gain).connect(context.destination);tone.start(now+offset);tone.stop(now+offset+0.1);
+  }
+}

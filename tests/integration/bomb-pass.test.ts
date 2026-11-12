@@ -106,7 +106,7 @@ describe('bomb pass DB / Edge integration',()=>{
     expect(exploded.state.status).toBe('exploded');
     expect(Object.values(exploded.state.explosionCounts).reduce((a,b)=>a+b,0)).toBe(1);
     expect(Object.values((await snapshot(host)).state.explosionCounts).reduce((a,b)=>a+b,0)).toBe(1);
-    expect((await command(nextHolder,'next',exploded.version)).status).toBe(403);
+    expect((await command(participants.find(p=>p.player_id!==host.player_id)!,'next',exploded.version)).status).toBe(403);
     expect((await command(host,'next',exploded.version)).status).toBe(200);
     const second=await snapshot(host);
     expect(second.state.round).toBe(2);

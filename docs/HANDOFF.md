@@ -1,5 +1,10 @@
 # HANDOFF (2026-10-29)
 
+## BOMB-3 온라인 UX 및 QA 보완 (2026-11-12, `codex/bomb-pass-mvp`)
+- BOMB-2 재실행 원격 HTTP 229개 assertion 및 테스트 방 정리 성공 (Actions 43146357882). 초기 313개 assertion 성공 후 남았던 확인된 QA 전용 방 1개는 기존 close_room RPC로 종료. 새 SQL/Edge 배포 없음. 로컬 SQL 랜덤 지목 테스트가 방장이 선택될 때 비방장 권한을 잘못 가정한 실패 수정. HTTP cleanup 버전 충돌 최대 3회 재조회.
+- 온라인 내 차례 배너/테두리/짧은 오리지널 음향 및 지원 브라우저 진동(사용자 토글), 폭발 짧은 흔들림/진동, reduced-motion 준수. 새 폭발 ID 기준 중복 방지. 설정 변경 후 시작 버튼이 설정 저장을 먼저 수행, 결과 진행 라운드와 폭발 횟수 분리, 재접속 가능한 기존 룸 시스템 유지. 방 종료/나가기 확인과 기존 공통 room command 재사용, 방장 게임 종료 후 방 닫기. 중복 클릭 방지, 오래된 응답으로 UI 역행 방지, 상태 polling 겹침 방지.
+- shortcut: 실제 모바일 브라우저 진동 지원/오디오 활성화/랜덤 지목 반응성과 방 종료·이탈 상황 실기기 검증 필요. CI 실행 확인 전 전체 통과 단정하지 않는다. main 병합/운영 프런트 배포 없음.
+
 ## 폭탄 돌리기 BOMB-2 서버 연결 QA (2026-11-12, `codex/bomb-pass-mvp`)
 - 사용자 승인 후 실제 Supabase DB에서 3개 독립 참가자 자격증명으로 방 생성/입장, 인증 차단, 상태 공유, stale version·중도 입장·마감 후 패스 차단, 폭발/다음 라운드/종료 등 11개 SQL 검증 통과. 테스트 트랜잭션 롤백으로 신규 방 0개. Edge/브라우저 E2E와 구분한다.
 - 기존 배포 함수 본문과 권한을 보존하고 공통 CORS allowlist에 폭탄 전용 stable preview origin `https://party-game-git-codex-bomb-pass-mvp-audwns1322.vercel.app`만 추가. `bomb-command` v2, `room-create` v7, `room-join` v5, `room-snapshot` v6, `room-command` v12, `player-recover` v5 ACTIVE 및 소스 재조회 일치. 운영 도메인·localhost·환경변수 허용 목록 유지. Vercel 로그인 보호는 해제하지 않음.

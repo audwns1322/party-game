@@ -60,9 +60,16 @@ async function phase(s,status,timeout=65000){
   throw Error('Timeout waiting for '+status.join('/'));
 }
 async function close(s,origin){
-  const state=expectStatus(await common(s,origin),200,'cleanup snapshot');
-  const result=await request('room-command',{token:s.token,origin,body:{room_id:s.room_id,action:'close_room',expected_version:state.room.version,request_id:randomUUID(),payload:{}}});
-  expectStatus(result,200,'cleanup room');
+  for(let attempt=0;attempt<3;attempt++){
+    const snapshot=await common(s,origin);
+    if(snapshot.status===410)return;
+    const state=expectStatus(snapshot,200,'cleanup snapshot');
+    const result=await request('room-command',{token:s.token,origin,body:{room_id:s.room_id,action:'close_room',expected_version:state.room.version,request_id:randomUUID(),payload:{}}});
+    if(result.status===410)return;
+    if(result.data.error==='VERSION_CONFLICT')continue;
+    expectStatus(result,200,'cleanup room');return;
+  }
+  throw Error('QA room version changed during cleanup');
 }
 let cleanupFailed=false;
 try{

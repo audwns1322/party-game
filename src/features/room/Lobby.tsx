@@ -268,7 +268,7 @@ export function Lobby({ session }: { session: StoredSession }) {
 
   const { room, me, players } = snapshot;
   if (room.game_type === 'quoridor') return <QuoridorOnline session={session} room={room} me={me} players={players} online={online} />;
-  if (room.game_type === 'bomb-pass') return <BombPassOnline session={session} room={room} me={me} players={players} online={online} />;
+  if (room.game_type === 'bomb-pass') return <BombPassOnline session={session} room={room} me={me} players={players} online={online} run={run} />;
   const round = snapshot.round;
   const play = async (action: string,payload?: object) => {
     setBusy(true); setError('');

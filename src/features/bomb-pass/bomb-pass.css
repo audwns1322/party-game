@@ -136,3 +136,17 @@
 @media(max-width:700px){.bp-layout{grid-template-columns:1fr}.bp-aside{display:grid;grid-template-columns:1fr 1fr}.bp-side-panel:first-child{grid-column:1/-1}.bp-players{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.bp-shell{max-width:530px}.bp-title-area{margin-bottom:20px}.bp-stage{min-height:365px}}
 @media(max-width:440px){.bp-shell{padding:12px 13px 22px}.bp-header{margin-bottom:16px}.bp-back{font-size:.71rem}.bp-preview-tag{font-size:.59rem;padding:7px 9px}.bp-title-area h1{font-size:2.75rem}.bp-title-area p{font-size:.85rem}.bp-layout{gap:13px}.bp-main-card,.bp-side-panel{border-radius:17px}.bp-stage-top{padding:13px 15px 0}.bp-stage{min-height:330px;padding-top:12px}.bp-bomb-wrap{transform:scale(.85);margin:-9px 0 -17px}.bp-stage-copy strong{font-size:1.5rem}.bp-controls,.bp-actions,.bp-final-summary{padding:3px 15px 18px}.bp-howto{padding:12px 10px}.bp-howto-heading{justify-content:center;text-align:center;gap:4px}.bp-howto-heading h2{font-size:1rem}.bp-instructions{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.bp-instructions li{padding:12px 5px 10px}.bp-instructions li::after{display:none}.bp-instructions strong{font-size:.74rem}.bp-howto-footer span{display:block;margin:4px 0 0}.bp-fields{gap:9px}.bp-style-toggle button{font-size:.75rem}.bp-between-rounds{padding:0 14px 18px}.bp-topic{margin:0 14px 13px;padding:12px}.bp-aside{grid-template-columns:1fr}.bp-side-panel:first-child{grid-column:auto}.bp-side-panel{padding:16px}.bp-tip-panel{display:none}.bp-players{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.bp-player{padding:6px;gap:5px}.bp-avatar{height:30px;width:30px;border-radius:9px}.bp-player-name{font-size:.78rem}.bp-player-stat{font-size:.71rem}.bp-disclaimer{font-size:.71rem}}
 @media(prefers-reduced-motion:reduce){.bp-spark,.bp-playing .bp-bomb-wrap,.bp-playing .bp-bomb-symbol,.bp-explosion,.bp-exploded .bp-stage-glow{animation:none!important}.bp-main-button{transition:none}}
+
+/* BOMB-3: clear personal turn, brief impact, accessible motion fallback. */
+.bp-your-turn .bp-main-card{border:2px solid #ffad39;box-shadow:0 0 0 3px #ffad3926,0 12px 55px #fc6f3e55}
+.bp-turn-banner{margin:14px 18px 0;padding:12px 10px;background:#ffb43b;color:#261709;border-radius:12px;text-align:center;font-size:1.1rem;font-weight:950;animation:bp-turn-in .25s ease-out}
+.bp-your-turn .bp-stage-glow{background:radial-gradient(circle,#f9694b88 0,#87402e55 45%,transparent 74%)}
+.bp-your-turn .bp-stage-copy strong{color:#ffc466}
+.bp-your-turn .bp-main-button{min-height:64px}
+.bp-online-exploded .bp-stage{animation:bp-impact .48s ease-out}
+.bp-room-options{display:flex;justify-content:center;gap:10px;max-width:460px;margin:18px auto 0}
+.bp-room-options .bp-end{margin:0;flex:1}
+@keyframes bp-turn-in{from{opacity:.5;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes bp-impact{0%,100%{transform:translateX(0)}15%,45%{transform:translateX(-5px)}30%,60%{transform:translateX(5px)}80%{transform:translateX(-2px)}}
+@media(max-width:700px){.bp-your-turn .bp-stage{min-height:240px;padding-top:2px}.bp-your-turn .bp-bomb-wrap{height:166px;transform:scale(.67);margin:-20px 0 0}.bp-your-turn .bp-stage-copy{min-height:56px}.bp-your-turn .bp-title-area{margin-bottom:12px}.bp-your-turn .bp-stage-copy span{font-size:.8rem}.bp-your-turn .bp-turn-banner{margin:10px 14px 0}}
+@media(prefers-reduced-motion:reduce){.bp-turn-banner,.bp-online-exploded .bp-stage{animation:none!important}}

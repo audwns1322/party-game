@@ -52,15 +52,15 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
   return <section className="card" aria-labelledby="round-title">
     <h2 id="round-title">{titles[round.phase]}</h2>
     {round.theme && <p className="notice">{t('공통 테마:','Category:')} <strong>{en?(themeNames[round.theme]??round.theme):round.theme}</strong></p>}
-    <p>{t('라이어','Liars:')} {round.liar_count ?? 1}{round.vote && round.vote.cycle_no && round.vote.cycle_no>1?' · Additional ballot':''}</p>
+    <p>{t('라이어','Liars:')} {round.liar_count ?? 1}{round.vote && round.vote.cycle_no && round.vote.cycle_no>1?t(' · 추가 투표',' · Additional ballot'):''}</p>
     {Boolean(round.eliminated_ids?.length) && <p>{t('탈락한 라이어:','Eliminated liars: ')}{round.eliminated_ids!.map(playerName).join(', ')}</p>}
     {round.me?.eliminated && <p className="notice">{t("탈락했어요. 남은 진행을 지켜봐 주세요. 투표에는 참여할 수 없어요.","You are out. Watch the rest of the round.")}</p>}
     {round.game_mode === 'confusion' && <p>{t('혼선 라이어','Confusion liar')} · {round.difficulty === 'hard' ? t('하드','Hard') : t('이지','Easy')}</p>}
     {Boolean(round.away_ids?.length) && round.phase!=='PAUSED_DISCONNECT' && <p className="notice" role="status">{t('자리 비움: ','Away: ')}{round.away_ids!.map(playerName).join(', ')}. {t('가능한 행동은 계속 진행하고, 빠진 참가자의 행동이 필요한 경우에만 기다려요.','Keep playing. We wait only for actions the absent players still need to complete.')}</p>}
     {round.phase === 'PAUSED_DISCONNECT' && round.disconnect && <div className="notice">
-      <p role="status">{round.disconnect.missing_ids.map(playerName).join(', ')}님의 연결이 끊겨 진행을 멈췄어요. 모두 돌아오면 자동으로 이어져요.</p>
-      <p role="timer">{remaining === 0 ? '복귀 유예가 끝났어요.' : `복귀 유예 ${remaining ?? '…'}초`}</p>
-      {round.disconnect.remaining_ms !== null && <p>게임에 남은 시간 {Math.ceil(round.disconnect.remaining_ms/1000)}초를 보관했어요.</p>}
+      <p role="status">{round.disconnect.missing_ids.map(playerName).join(', ')} · {t('재접속 대기 중','Waiting to reconnect.')}</p>
+      <p role="timer">{remaining === 0 ? t('복귀 유예가 끝났어요.','Reconnect grace period ended.') : t(`복귀 유예 ${remaining ?? '…'}초`,`Reconnect grace: ${remaining ?? '…'} sec`)}</p>
+      {round.disconnect.remaining_ms !== null && <p>{t('보관한 남은 시간','Saved time remaining:')} {Math.ceil(round.disconnect.remaining_ms/1000)}{t('초',' sec')}</p>}
       {snapshot.me.is_host && remaining === 0 && <button disabled={busy} onClick={() => void run('wait_reconnect',{round_id:round.id})}>{t("30초 더 기다리기","Wait 30 more seconds")}</button>}
       <p>{t("방장이 돌아오지 않으면 연결된 이번 판 참가자에게 방장 권한을 자동으로 넘겨요.","If the host stays away, another active player becomes host.")}</p>
     </div>}
@@ -100,7 +100,7 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
             else setConfirmSkip(true);
           }}>{remaining === null ? t("토론 마치고 투표로","End discussion and vote") : confirmSkip ? t("한 번 더 누르면 토론을 끝내요","Tap again to end discussion") : t("남은 시간 건너뛰기","Skip remaining time")}</button>}
         </>}
-        {round.phase === 'PAUSED_HOST' && <p role="status">방장이 진행을 멈췄어요.{round.remaining_ms !== null ? ' 남은 토론 시간 '+Math.ceil(round.remaining_ms/1000)+'초' : ''}</p>}
+        {round.phase === 'PAUSED_HOST' && <p role="status">{t('방장이 진행을 멈췄어요.','The host paused the game.')}{round.remaining_ms !== null ? t(' 남은 토론 시간 '+Math.ceil(round.remaining_ms/1000)+'초',' Discussion time left: '+Math.ceil(round.remaining_ms/1000)+' sec') : ''}</p>}
         {['VOTE_1','VOTE_RUNOFF'].includes(round.phase) && round.vote && !round.me.eliminated && <>
           <p>{round.phase === 'VOTE_RUNOFF' ? t("공동 1위 후보에게 한 번 더 투표해요. 다시 동률이면 무승부예요.","Vote again for tied candidates. A second tie is a draw.") : t("라이어라고 생각하는 참가자 한 명을 선택하세요.","Choose the player you think is the liar.")}</p>
           <p role="status">{t('투표 제출','Votes')} {round.vote.submitted_count}/{round.participant_ids.length} · {t('개인 투표 비공개','Individual votes are private.')}</p>

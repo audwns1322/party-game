@@ -222,44 +222,47 @@ export function Lobby({ session }: { session: StoredSession }) {
   const [qr, setQr] = useState('');
   const { armed, arm, disarm } = useArm();
   const { message: announcement, hostChange } = useRosterAnnouncement(snapshot?.players, snapshot?.room.host_player_id);
-  const inviteUrl = `${location.origin}/room/${session.code}`;
+  const en=snapshot?.room.game_type==='liar' && snapshot.room.settings.language==='en';
+  const t=(ko:string,english:string)=>en?english:ko;
+  const language=en?'en':'ko';
+  const inviteUrl = `${location.origin}/room/${session.code}${en?'?lang=en':''}`;
 
   useEffect(() => { QRCode.toDataURL(inviteUrl, { margin: 1, width: 220 }).then(setQr).catch(() => setQr('')); }, [inviteUrl]);
   useEffect(() => { if (fatal) clearSession(session.code); }, [fatal, session.code]);
 
   async function act(action: string, payload?: object) {
     setBusy(true); setError(''); setNotice(''); disarm();
-    try { await run(action, payload); return true; } catch (e) { setError(messageFor(e)); return false; } finally { setBusy(false); }
+    try { await run(action, payload); return true; } catch (e) { setError(messageFor(e,language)); return false; } finally { setBusy(false); }
   }
   async function share() {
     setError(''); setNotice('');
     try {
-      if (navigator.share) await navigator.share({ title: `${snapshot?.room.game_type === 'mafia'?'마피아':'라이어'} 게임 초대`, text: `방 코드 ${session.code}`, url: inviteUrl });
-      else { await navigator.clipboard.writeText(inviteUrl); setNotice('초대 링크를 복사했어요.'); }
+      if (navigator.share) await navigator.share({ title: snapshot?.room.game_type==='mafia'?'마피아 게임 초대':t('라이어 게임 초대','Join the Liar Game'), text: t(`방 코드 ${session.code}`,`Room code ${session.code}`), url: inviteUrl });
+      else { await navigator.clipboard.writeText(inviteUrl); setNotice(t('초대 링크를 복사했어요.','Invite link copied.')); }
     } catch { /* user cancelled */ }
   }
   async function copyRecovery() {
-    try { await navigator.clipboard.writeText(session.recovery_code ?? ''); setNotice('이어하기 코드를 복사했어요.'); } catch { /* ignore */ }
+    try { await navigator.clipboard.writeText(session.recovery_code ?? ''); setNotice(t('이어하기 코드를 복사했어요.','Recovery code copied.')); } catch { /* ignore */ }
   }
 
   if (fatal) {
     const closed = fatal.code === 'ROOM_CLOSED';
     return (
       <main>
-        <h1>{closed ? '종료된 방이에요' : '이 방에 접속할 수 없어요'}</h1>
-        <p>{messageFor(fatal)}</p>
-        {!closed && <button className="primary" onClick={() => navigate(`/room/${session.code}`)}>이 방에 다시 참가하기</button>}
-        <button onClick={() => navigate('/')}>처음으로</button>
+        <h1>{closed ? t('종료된 방이에요','Room closed') : t('이 방에 접속할 수 없어요','Cannot join this room')}</h1>
+        <p>{messageFor(fatal,language)}</p>
+        {!closed && <button className="primary" onClick={() => navigate(`/room/${session.code}${en?'?lang=en':''}`)}>{t('이 방에 다시 참가하기','Rejoin this room')}</button>}
+        <button onClick={() => navigate('/')}>{t('처음으로','Home')}</button>
       </main>
     );
   }
   if (!snapshot) {
     return (
       <main>
-        {online ? <p aria-live="polite">방 정보를 불러오는 중…</p> : (
+        {online ? <p aria-live="polite">{t('방 정보를 불러오는 중…','Loading room…')}</p> : (
           <>
-            <p role="alert" className="error">서버에 연결할 수 없어요. 인터넷 연결을 확인해 주세요.</p>
-            <button className="primary" onClick={() => void refresh()}>다시 시도</button>
+            <p role="alert" className="error">{t('서버에 연결할 수 없어요. 인터넷 연결을 확인해 주세요.','Cannot reach the server. Check your internet connection.')}</p>
+            <button className="primary" onClick={() => void refresh()}>{t('다시 시도','Try again')}</button>
             <button onClick={() => navigate('/')}>처음으로</button>
           </>
         )}
@@ -271,11 +274,9 @@ export function Lobby({ session }: { session: StoredSession }) {
   if (room.game_type === 'quoridor') return <QuoridorOnline session={session} room={room} me={me} players={players} online={online} />;
   if (room.game_type === 'bomb-pass') return <BombPassOnline session={session} room={room} me={me} players={players} online={online} run={run} />;
   const round = snapshot.round;
-  const en=room.game_type==='liar' && room.settings.language==='en';
-  const t=(ko:string,english:string)=>en?english:ko;
   const play = async (action: string,payload?: object) => {
     setBusy(true); setError('');
-    try { await runGame(action,payload); } catch (e) { setError(messageFor(e)); } finally { setBusy(false); }
+    try { await runGame(action,payload); } catch (e) { setError(messageFor(e,language)); } finally { setBusy(false); }
   };
   const isHost = me.is_host;
   const needsTheme = room.settings.word_mode === 'custom' && !room.settings.custom_theme?.trim();
@@ -294,17 +295,17 @@ export function Lobby({ session }: { session: StoredSession }) {
   return (
     <main>
       {!online && <p className="banner" role="status">{t("연결이 끊겼어요. 다시 연결하는 중…","Reconnecting… Your game is saved.")}</p>}
-      <p className="sr-only" aria-live="polite">{announcement}</p>
-      {hostChange && <p role="status" className="notice">{hostChange}</p>}
+      <p className="sr-only" aria-live="polite">{en?'Room participants updated.':announcement}</p>
+      {hostChange && <p role="status" className="notice">{en?'The host has changed.':hostChange}</p>}
 
       <span className="badge">{room.game_type === 'mafia' ? '마피아 대기실 · 방 코드' : t('라이어 대기실 · 방 코드','LIAR GAME · Room code')}</span>
-      <h1 className="code" aria-label={`방 코드 ${room.code.split('').join(' ')}`}>{room.code}</h1>
+      <h1 className="code" aria-label={t(`방 코드 ${room.code.split('').join(' ')}`,`Room code ${room.code.split('').join(' ')}`)}>{room.code}</h1>
       <div className="row">
         <button type="button" className="primary" onClick={share}>{t("친구 초대하기","Invite friends")}</button>
       </div>
       <details className="card">
         <summary>{t("QR 코드로 초대","Invite by QR code")}</summary>
-        {qr && <img className="qr" src={qr} alt="이 방 초대 QR 코드" width={180} height={180} />}
+        {qr && <img className="qr" src={qr} alt={t('이 방 초대 QR 코드','Room invite QR code')} width={180} height={180} />}
       </details>
 
       {error && <p role="alert" className="error">{error}</p>}
@@ -342,26 +343,26 @@ export function Lobby({ session }: { session: StoredSession }) {
       {room.game_type === 'mafia' ? !snapshot.mafia && <MafiaSettings roles={room.settings.mafia_roles ?? {mafia:1,spy:0,citizen:2,police:1,doctor:0,journalist:0,traitor:0}} participants={players.length} editable={isHost && !busy && online} save={roles=>act('update_settings',{mafia_roles:roles})}/> : <details className="card" open={isHost}>
         <summary>{t('게임 설정','Game settings')} {isHost ? '' : t('(방장만 변경)','(Host only)')}</summary>
         <label>{t('게임 언어','Game language')}<select disabled={!isHost || busy || Boolean(round)} value={room.settings.language ?? 'ko'} onChange={e=>void setting({language:e.target.value as 'ko'|'en'})}><option value="ko">한국어</option><option value="en">English</option></select></label>
-        <label>제시어
+        <label>{t("제시어","Word source")}
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.word_mode} onChange={(e) => setting({ word_mode: e.target.value as Settings['word_mode'],game_mode:'classic' })}>
             <option value="builtin">{t("기본 제시어","Built-in words")}</option>
             <option value="custom">{t("직접 입력","Custom words")}</option>
           </select>
         </label>
         {room.settings.word_mode === 'builtin' ? <>
-          <label>테마
+          <label>{t("테마","Category")}
             <select disabled={!isHost || busy || Boolean(round)} value={room.settings.theme ?? 'random'} onChange={e => void setting({theme:e.target.value as Settings['theme']})}>
               <option value="random">{t("랜덤 테마","Random category")}</option>
               {THEMES.map(theme => <option key={theme} value={theme}>{en?THEME_EN[theme]:theme}</option>)}
             </select>
           </label>
           {room.settings.theme === '크로스핏' && <p className="hint">{t("크로스핏 동작 용어를 아는 참가자끼리 선택해 주세요.","Choose CrossFit only if everyone knows the movements.")}</p>}
-          <label>게임 방식
+          <label>{t("게임 방식","Game mode")}
             <select disabled={!isHost || busy || Boolean(round)} value={room.settings.game_mode ?? 'classic'} onChange={e => void setting({game_mode:e.target.value as Settings['game_mode']})}>
               <option value="classic">{t("기본 라이어","Classic liar")}</option><option value="confusion">{t("혼선 라이어","Confusion liar")}</option>
             </select>
           </label>
-          {room.settings.game_mode === 'confusion' && <label>라이어 난이도
+          {room.settings.game_mode === 'confusion' && <label>{t("라이어 난이도","Liar difficulty")}
             <select disabled={!isHost || busy || Boolean(round)} value={room.settings.difficulty ?? 'easy'} onChange={e => void setting({difficulty:e.target.value as Settings['difficulty']})}>
               <option value="easy">{t("이지 · 비슷한 제시어","Easy · Similar words")}</option><option value="hard">{t("하드 · 차이가 큰 제시어","Hard · Different words")}</option>
             </select>
@@ -372,24 +373,24 @@ export function Lobby({ session }: { session: StoredSession }) {
             event.preventDefault();
             void setting({custom_theme:String(new FormData(event.currentTarget).get('theme') ?? '')});
           }}>
-            <label>{t("공통 테마","Shared category")}<input name="theme" defaultValue={room.settings.custom_theme ?? ''} maxLength={60} placeholder="예: 음식, 우리 학교" disabled={!isHost || busy || Boolean(round)} required /></label>
+            <label>{t("공통 테마","Shared category")}<input name="theme" defaultValue={room.settings.custom_theme ?? ''} maxLength={60} placeholder={t('예: 음식, 우리 학교','e.g. Food, our school')} disabled={!isHost || busy || Boolean(round)} required /></label>
             {isHost && <button disabled={busy || Boolean(round)}>{t("테마 저장","Save category")}</button>}
           </form>
           <p className="hint">{t("기본 라이어로 진행해요. 각자 테마에 맞는 단어 하나만 제출해 주세요.","Classic mode. Everyone submits one word for the category.")}</p>
         </>}
-        <label>힌트 바퀴 수
+        <label>{t("힌트 바퀴 수","Clue rounds")}
           <span className="hint">{t("라이어 수와 힌트 바퀴 수는 시작 후 바꿀 수 없어요.","Liar count and clue rounds cannot change after starting.")}</span>
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.hint_rounds} onChange={(e) => setting({ hint_rounds: Number(e.target.value) as Settings['hint_rounds'] })}>
             {[1, 2, 3].map((n) => <option key={n} value={n}>{n}{t('바퀴',' rounds')}</option>)}
           </select>
         </label>
-        <label>라이어 수
+        <label>{t("라이어 수","Number of liars")}
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.liar_count ?? 1} onChange={e => void setting({liar_count:Number(e.target.value) as 1 | 2})}>
             <option value={1}>{t("1명","1 player")}</option><option value={2}>{t("2명","2 players")}</option>
           </select>
         </label>
         {room.settings.liar_count === 2 && <p className="hint">{t("2명 모두 잡아야 시민 팀이 이겨요. 5명 이상일 때 권장해요.","Citizens must catch both liars. Recommended for 5+ players.")}</p>}
-        <label>토론 시간
+        <label>{t("토론 시간","Discussion time")}
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.discussion_seconds} onChange={(e) => setting({ discussion_seconds: Number(e.target.value) as Settings['discussion_seconds'] })}>
             {[60, 120, 180, 300].map((s) => <option key={s} value={s}>{s / 60}{t('분',' min')}</option>)}
             <option value={0}>{t("무제한","No limit")}</option>
@@ -406,12 +407,12 @@ export function Lobby({ session }: { session: StoredSession }) {
         <details className="card">
           <summary>{t("다른 기기로 옮기기","Continue on another device")}</summary>
           <p>{t("폰을 바꾸거나 다른 브라우저로 이어서 할 때 이 코드를 입력하세요. 코드를 쓰면 지금 기기는 자동으로 빠져요.","Use this code on another device or browser. The previous device will be signed out.")}</p>
-          <p className="recovery" aria-label="이어하기 코드">{session.recovery_code}</p>
+          <p className="recovery" aria-label={t('이어하기 코드','Recovery code')}>{session.recovery_code}</p>
           <button type="button" onClick={copyRecovery}>{t("코드 복사","Copy recovery code")}</button>
         </details>
       )}
 
-      <p className="notice">사용자 조작 없이 2시간이 지나면 방이 만료돼요. 종료·만료된 방의 참가 정보와 전적은 정리 작업으로 삭제돼요. 서버 백업은 별도 보존 정책을 따라요.</p>
+      <p className="notice">{t('사용자 조작 없이 2시간이 지나면 방이 만료돼요. 종료·만료된 방의 참가 정보와 전적은 정리 작업으로 삭제돼요. 서버 백업은 별도 보존 정책을 따라요.','Rooms expire after two hours without player actions. Closed or expired rooms and their scores are cleaned up. Server backups follow a separate retention policy.')}</p>
       <button type="button" disabled={busy || Boolean(round?.me)}
         onClick={() => (armed === 'leave' ? void act('leave').then((ok) => { if (ok) { clearSession(session.code); navigate('/'); } }) : arm('leave'))}>
         {armed === 'leave' ? t("한 번 더 누르면 나가요","Tap again to leave") : t("방 나가기","Leave room")}

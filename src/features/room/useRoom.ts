@@ -38,12 +38,15 @@ export function useRoom(session: Session) {
   /** false after a failed heartbeat or snapshot (server unreachable); the UI shows a banner. */
   const [online, setOnline] = useState(true);
   const version = useRef(0);
+  const latestSnapshotTime=useRef(0);
 
   const refresh = useCallback(async () => {
     try {
       const next = await api.snapshot(session);
-      if (next.room.version < version.current) return;
+      const timestamp=Date.parse(next.server_now??'')||0;
+      if (next.room.version < version.current || (next.room.version===version.current && timestamp>0 && timestamp<latestSnapshotTime.current)) return;
       version.current = next.room.version;
+      latestSnapshotTime.current=Math.max(latestSnapshotTime.current,timestamp);
       setSnapshot(next);
       setOnline(true);
       return next;
@@ -151,12 +154,27 @@ export function useRoom(session: Session) {
     try {
       try { await api.game(session,body); }
       catch (error) {
-        if (!(error instanceof ApiError && error.code === 'VERSION_CONFLICT' && action === 'submit_vote')) throw error;
-        const fresh = await refresh();
-        if (!canRetryVote(body,fresh)) throw error;
-        body = {...body,expected_version:fresh.room.version,request_id:crypto.randomUUID()};
-        pending.current = body;
-        await api.game(session,body);
+        if (!(error instanceof ApiError && error.code === 'VERSION_CONFLICT')) throw error;
+        // Independent submissions can collide when several players tap at once. Revalidate the exact round,
+        // phase and player's own submission state before any retry; never blindly replay a turn.
+        let accepted=false;
+        for(let attempt=0;attempt<15;attempt++){
+          const fresh=await refresh();
+          const payload=body.payload as {round_id?:string;hint_index?:number;guess_id?:string};
+          const r=fresh?.round;
+          if(!fresh||!r||r.id!==payload.round_id||r.phase!==body.expected_phase||!r.me||r.me.eliminated)throw error;
+          const safe=action==='submit_vote'?canRetryVote(body,fresh):
+            action==='ack_role'?!r.me.acknowledged:
+            action==='submit_word'?!r.me.submitted:
+            action==='finish_hint'?r.hint_index===payload.hint_index&&r.current_player_id===fresh.me.player_id:
+            action==='submit_appeal_vote'?r.m5?.guess_id===payload.guess_id&&!r.m5?.my_appeal_voted:false;
+          if(!safe)throw error;
+          body={...body,expected_version:fresh.room.version,request_id:crypto.randomUUID()};
+          pending.current=body;
+          try{await api.game(session,body);accepted=true;break;}
+          catch(retryError){if(!(retryError instanceof ApiError&&retryError.code==='VERSION_CONFLICT'))throw retryError;}
+        }
+        if(!accepted)throw error;
       }
       pending.current = null;
     }

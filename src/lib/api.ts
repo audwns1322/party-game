@@ -67,9 +67,11 @@ export const apiConfigured = Boolean(baseUrl && publicKey);
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!apiConfigured) throw new ApiError('NOT_CONFIGURED', 0);
   let response: Response;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),12000);
   try {
-    response = await fetch(new URL(`/functions/v1/${path}`, baseUrl), { ...init, cache: 'no-store', headers: { apikey: publicKey!, ...init.headers } });
-  } catch { throw new ApiError('NETWORK', 0); }
+    response = await fetch(new URL(`/functions/v1/${path}`, baseUrl), { ...init, signal:init.signal??controller.signal, cache: 'no-store', headers: { apikey: publicKey!, ...init.headers } });
+  } catch { throw new ApiError('NETWORK', 0); } finally { clearTimeout(timeout); }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(typeof data.error === 'string' ? data.error : 'TEMPORARILY_UNAVAILABLE', response.status);
   return data as T;
@@ -141,4 +143,44 @@ const MESSAGES: Record<string, string> = {
   NETWORK: '서버에 연결할 수 없어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.',
   NOT_CONFIGURED: '서버 설정(.env.local)이 없어요.',
 };
-export const messageFor = (error: unknown) => MESSAGES[error instanceof ApiError ? error.code : ''] ?? '잠시 후 다시 시도해 주세요.';
+const MESSAGES_EN:Record<string,string> = {
+  "INVALID_NICKNAME": "Use 2–16 visible characters for your nickname.",
+  "INVALID_CODE": "Enter the six-digit room code.",
+  "ROOM_NOT_FOUND": "Room not found. Check the code; the room may have closed.",
+  "ROOM_LOCKED": "The host has locked the room.",
+  "PLAYER_NOT_FOUND": "This player has left the room.",
+  "ROOM_FULL": "The room is full (15 players).",
+  "NICKNAME_TAKEN": "This nickname is already in use or too similar.",
+  "RECOVERY_FAILED": "That recovery code is incorrect.",
+  "HOST_ONLY": "Only the host can do this.",
+  "NOT_YOUR_TURN": "It is not your turn. Please check the latest screen.",
+  "DISCUSSION_NOT_OVER": "Discussion time is not over yet.",
+  "DISCUSSION_OVER": "Discussion time is over. Check the latest screen.",
+  "VERSION_CONFLICT": "The game has changed. Please try again.",
+  "PHASE_CONFLICT": "The game has moved to another step. Check the latest screen.",
+  "REQUEST_CONFLICT": "Your request has changed. Check the latest screen.",
+  "PLAYER_COUNT": "You need 3–15 players.",
+  "PLAYERS_OFFLINE": "Wait for everyone to join before starting.",
+  "ROUND_ACTIVE": "Finish or cancel the current round first.",
+  "ROUND_PAUSED": "The round is paused.",
+  "RECONNECT_GRACE": "Wait for the reconnect grace period to end.",
+  "NOT_ROUND_PLAYER": "Wait for the next round.",
+  "INVALID_WORD": "Enter a word with 2–30 visible characters.",
+  "INVALID_SETTINGS": "Check the category and game settings. Custom words require a category and classic mode.",
+  "ALREADY_SUBMITTED": "You have already submitted a word.",
+  "ALREADY_ACKNOWLEDGED": "You have already confirmed your role.",
+  "ALREADY_VOTED": "Your vote has already been submitted.",
+  "INVALID_TARGET": "Choose an eligible player other than yourself.",
+  "INVALID_GUESS": "Enter a guess of 1–60 visible characters.",
+  "NOT_GUESSER": "Only the selected liar may guess.",
+  "CITIZEN_ONLY": "Only citizens may appeal or vote on an answer.",
+  "ALREADY_APPEAL_VOTED": "You have already voted on this answer.",
+  "ROOM_CLOSED": "This room has closed.",
+  "FORBIDDEN": "This session is no longer valid. You may have continued on another device.",
+  "UNAUTHORIZED": "Your session is no longer valid. Rejoin or use your recovery code.",
+  "RATE_LIMITED": "Too many requests. Try again in a moment.",
+  "NETWORK": "Cannot reach the server. Check your connection and try again.",
+  "NOT_CONFIGURED": "The server is not configured.",
+  "TEMPORARILY_UNAVAILABLE": "The server is temporarily unavailable. Please try again."
+};
+export const messageFor = (error: unknown,language:'ko'|'en'='ko') => language==='en' ? MESSAGES_EN[error instanceof ApiError ? error.code : ''] ?? 'Please try again in a moment.' : MESSAGES[error instanceof ApiError ? error.code : ''] ?? '잠시 후 다시 시도해 주세요.';

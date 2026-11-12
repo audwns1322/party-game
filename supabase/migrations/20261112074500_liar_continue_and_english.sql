@@ -79,6 +79,12 @@ do $migration$ declare d text; anchor text; begin
  execute d;
 end $migration$;
 
+-- Built-in words can be one character (e.g. 비, 눈, 컵). Custom submission validation is unchanged.
+alter table app_private.builtin_words drop constraint builtin_words_word_check;
+alter table app_private.builtin_words add constraint builtin_words_word_check check(char_length(word) between 1 and 30);
+alter table app_private.round_secrets drop constraint round_secrets_word_check;
+alter table app_private.round_secrets add constraint round_secrets_word_check check(char_length(word) between 1 and 30);
+
 -- 35 curated words per theme, preserving existing assigned secrets.
 delete from app_private.builtin_words;
 insert into app_private.builtin_words(category,word,easy_word,hard_word) values

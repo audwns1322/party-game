@@ -59,7 +59,7 @@ describe('M2 assignment and secrecy',()=>{
     const {rows}=await db.query<{liars:number,total:number}>('select count(*) filter(where role=\'liar\')::int liars,count(*)::int total from app_private.round_players where round_id=$1',[dto.round!.id]);
     expect(rows[0]).toEqual({liars:1,total:count});
     let liars=0;
-    for(const p of players){const d=await snapshot(p);if(d.round!.me!.role==='liar'){liars++;expect(d.round!.me!.word).toBeNull();}else expect(d.round!.me!.word?.length).toBeGreaterThan(1);}
+    for(const p of players){const d=await snapshot(p);if(d.round!.me!.role==='liar'){liars++;expect(d.round!.me!.word).toBeNull();}else expect(d.round!.me!.word?.length).toBeGreaterThan(0);}
     expect(liars).toBe(1);
   });
   it('host-as-liar fixture cannot read word; DTO never contains other roles, hashes or candidates',async()=>{
@@ -516,6 +516,13 @@ describe('Liar connection authority and lifecycle',()=>{
  it('keeps automatic host transfer and heartbeat from extending expiry',async()=>{
   const p=await hints();await db.query("update app_private.rooms set last_activity_at=now()-interval '119 minutes',expires_at=now()+interval '1 minute' where id=$1",[p[0].room_id]);
   const before=(await snapshot(p[1])).room.expires_at;await heartbeat(p[1]);await disconnect(p[0],61);await snapshot(p[1]);expect((await snapshot(p[1])).room.expires_at).toBe(before);
+ });
+ it('allows a one-character built-in word without weakening custom submission validation',async()=>{
+  const p=await room();const host=p[0];await settings(host,{theme:'자연'});await game(host,'start_round');const d=(await snapshot(host)).round!;
+  await db.query("update app_private.round_secrets set word='비' where round_id=$1",[d.id]);
+  for(const s of p){const own=(await snapshot(s)).round!.me!;expect(own.word).toBe(own.role==='liar'?null:'비');}
+  await game(host,'cancel_round');await settings(host,{word_mode:'custom',custom_theme:'자연'});await game(host,'start_round');const r=(await snapshot(host)).round!;
+  expect((await game(host,'submit_word',{round_id:r.id,word:'비'})).status).toBe(400);
  });
  it('validates English settings, all 315 English words, and excludes CrossFit from English random',async()=>{
   const p=await room();const host=p[0];expect((await settings(host,{language:'xx'})).status).toBe(400);expect((await settings(p[1],{language:'en'})).status).toBe(403);

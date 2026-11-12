@@ -167,6 +167,8 @@ it('preserves liar lobby leave and active-round rejection', async () => {
 
 it('keeps RPC permissions unchanged and denies anonymous roles', async () => {
   const acl = async () => (await db.query("select oid::regprocedure::text as name,proacl::text as acl,proowner::regrole::text as owner,prosecdef,proconfig from pg_proc where oid in ('public.room_command(text,uuid,text,jsonb,integer)'::regprocedure,'app_private.room_command(text,uuid,text,jsonb,integer)'::regprocedure) order by name")).rows;
+  // Historical patch intentionally refuses newer function bodies. Replay it on its own baseline.
+  await db.exec(original);
   const before = await acl();
   await db.exec(patch);
   expect(await acl()).toEqual(before);
@@ -180,6 +182,9 @@ it('keeps RPC permissions unchanged and denies anonymous roles', async () => {
 it('is safe to repeat without deleting player data', async () => {
   const players = await room();
   await round(players);
+  // Check historical idempotency without overwriting the newer production implementation.
+  await db.exec(original);
+  await db.exec(patch);
   await db.exec(patch);
   expect(await status(players[1])).toBe('active');
   expect((await leave(players[1])).status).toBe(409);

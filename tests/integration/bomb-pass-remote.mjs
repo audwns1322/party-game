@@ -64,6 +64,7 @@ async function close(s,origin){
   const result=await request('room-command',{token:s.token,origin,body:{room_id:s.room_id,action:'close_room',expected_version:state.room.version,request_id:randomUUID(),payload:{}}});
   expectStatus(result,200,'cleanup room');
 }
+let cleanupFailed=false;
 try{
   for(const [path,method] of [['room-create','POST'],['room-join','POST'],['room-snapshot','GET'],['room-command','POST'],['player-recover','POST'],['bomb-command','POST']]){
     const r=await request(path,{method:'OPTIONS',headers:{'Access-Control-Request-Method':method,'Access-Control-Request-Headers':'authorization,apikey,content-type'}});
@@ -161,9 +162,8 @@ try{
   }
   console.log('PASS: BOMB HTTP smoke, '+checks+' assertions (including existing games and CORS)');
 }finally{
-  let cleanupFailed=false;
   for(const {room,origin} of createdRooms){
     try{await close(room,origin);}catch{cleanupFailed=true;console.error('QA room cleanup failed; maintenance expiry required');}
   }
-  if(cleanupFailed)throw Error('One or more QA rooms could not be closed');
 }
+if(cleanupFailed)throw Error('One or more QA rooms could not be closed');

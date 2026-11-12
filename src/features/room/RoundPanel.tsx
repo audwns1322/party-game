@@ -60,7 +60,7 @@ export function RoundPanel({ snapshot, busy, run }: { snapshot: RoomSnapshot; bu
     {round.phase === 'PAUSED_DISCONNECT' && round.disconnect && <div className="notice">
       <p role="status">{round.disconnect.missing_ids.map(playerName).join(', ')} · {t('재접속 대기 중','Waiting to reconnect.')}</p>
       <p role="timer">{remaining === 0 ? t('복귀 유예가 끝났어요.','Reconnect grace period ended.') : t(`복귀 유예 ${remaining ?? '…'}초`,`Reconnect grace: ${remaining ?? '…'} sec`)}</p>
-      {round.disconnect.remaining_ms !== null && <p>{t('보관한 남은 시간','Saved time remaining:')} {Math.ceil(round.disconnect.remaining_ms/1000)}{t('초',' sec')}</p>}
+      {round.disconnect.remaining_ms !== null && <p>{t(`게임에 남은 시간 ${Math.ceil(round.disconnect.remaining_ms/1000)}초를 보관했어요.`,`Saved time remaining: ${Math.ceil(round.disconnect.remaining_ms/1000)} sec`)}</p>}
       {snapshot.me.is_host && remaining === 0 && <button disabled={busy} onClick={() => void run('wait_reconnect',{round_id:round.id})}>{t("30초 더 기다리기","Wait 30 more seconds")}</button>}
       <p>{t("방장이 돌아오지 않으면 연결된 이번 판 참가자에게 방장 권한을 자동으로 넘겨요.","If the host stays away, another active player becomes host.")}</p>
     </div>}

@@ -24,7 +24,8 @@ do $migration$ declare d text; anchor text; begin
  execute d;
 end $migration$;
 
-create or replace function app_private.advance_connectivity(p_room uuid) returns boolean
+-- Keep the outer Mafia dispatch intact; replace only its original non-Mafia implementation.
+create or replace function app_private.advance_connectivity_before_mafia_reconnect(p_room uuid) returns boolean
 language plpgsql volatile security definer set search_path='' as $$
 declare r app_private.rooms;g app_private.rounds;v_now timestamptz:=clock_timestamp();v_next uuid;v_changed boolean:=false;
 begin

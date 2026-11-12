@@ -33,7 +33,7 @@ function secretFree(data){
 async function create(game_type,origin=preview){
   const r=await request('room-create',{body:{nickname:nick(),game_type},origin});
   const room=expectStatus(r,200,'create '+game_type);
-  createdRooms.push({room,origin});
+  createdRooms.push({room,origin,participants:[room]});
   equal(r.origin,origin,'create CORS');
   return room;
 }
@@ -41,6 +41,7 @@ async function join(room,origin=preview){
   const r=await request('room-join',{body:{room_code:room.code,nickname:nick()},origin});
   const player=expectStatus(r,200,'join');
   equal(r.origin,origin,'join CORS');
+  createdRooms.find(entry=>entry.room.room_id===room.room_id)?.participants.push(player);
   return player;
 }
 const common=(s,origin=preview)=>request('room-snapshot',{token:s.token,query:'?room_id='+s.room_id,origin});
@@ -50,23 +51,34 @@ async function view(s){
   equal(r.origin,preview,'bomb CORS');secretFree(data);
   return data;
 }
+const lastBeat=new Map();
+async function heartbeat(s,origin=preview){
+  const now=Date.now();
+  if(now-(lastBeat.get(s.player_id)??0)<8000)return;
+  const r=await request('room-command',{token:s.token,origin,body:{room_id:s.room_id,action:'heartbeat',request_id:randomUUID(),payload:{}}});
+  expectStatus(r,200,'heartbeat');lastBeat.set(s.player_id,now);
+}
 async function phase(s,status,timeout=65000){
   const end=Date.now()+timeout;
   while(Date.now()<end){
+    await heartbeat(s);
     const data=await view(s);
     if(status.includes(data.state.status))return data;
     await delay(350);
   }
   throw Error('Timeout waiting for '+status.join('/'));
 }
-async function close(s,origin){
+async function close(entry){
+  const {room:s,origin,participants}=entry;
   for(let attempt=0;attempt<3;attempt++){
     const snapshot=await common(s,origin);
     if(snapshot.status===410)return;
     const state=expectStatus(snapshot,200,'cleanup snapshot');
-    const result=await request('room-command',{token:s.token,origin,body:{room_id:s.room_id,action:'close_room',expected_version:state.room.version,request_id:randomUUID(),payload:{}}});
+    const currentHost=participants.find(p=>p.player_id===state.room.host_player_id);
+    ok(currentHost,'cleanup current host known');
+    const result=await request('room-command',{token:currentHost.token,origin,body:{room_id:s.room_id,action:'close_room',expected_version:state.room.version,request_id:randomUUID(),payload:{}}});
     if(result.status===410)return;
-    if(result.data.error==='VERSION_CONFLICT')continue;
+    if(['VERSION_CONFLICT','HOST_ONLY'].includes(result.data.error))continue;
     expectStatus(result,200,'cleanup room');return;
   }
   throw Error('QA room version changed during cleanup');
@@ -81,6 +93,7 @@ try{
   equal(denied.status,403,'unrelated origin denied');
   const host=await create('bomb-pass'),guest=await join(host),third=await join(host);
   const participants=[host,guest,third];
+  await heartbeat(host);
   const initial=await view(host);
   equal(initial.state.status,'lobby','lobby');equal(initial.players.length,3,'three participants');equal(initial.host,host.player_id,'host');
   for(const p of participants){
@@ -159,6 +172,9 @@ try{
   equal(restarted.state.status,'lobby','restart lobby');equal(restarted.state.round,0,'restart reset');
   const recovery=expectStatus(await request('player-recover',{body:{room_code:host.code,recovery_code:guest.recovery_code}}),200,'recover guest');
   equal(recovery.player_id,guest.player_id,'recovered identity');
+  const entry=createdRooms.find(e=>e.room.room_id===host.room_id);
+  entry.participants=entry.participants.map(p=>p.player_id===recovery.player_id?recovery:p);
+  await heartbeat(host);
   expectStatus(await bomb(guest),403,'old credential revoked');
   equal((await view(recovery)).me,guest.player_id,'new credential valid');
   for(const type of ['liar','mafia','quoridor']){
@@ -169,8 +185,8 @@ try{
   }
   console.log('PASS: BOMB HTTP smoke, '+checks+' assertions (including existing games and CORS)');
 }finally{
-  for(const {room,origin} of createdRooms){
-    try{await close(room,origin);}catch{cleanupFailed=true;console.error('QA room cleanup failed; maintenance expiry required');}
+  for(const entry of createdRooms){
+    try{await close(entry);}catch(error){cleanupFailed=true;console.error('QA room cleanup failed: '+(error instanceof Error?error.message:'unknown error'));}
   }
 }
 if(cleanupFailed)throw Error('One or more QA rooms could not be closed');

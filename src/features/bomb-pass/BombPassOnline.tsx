@@ -105,12 +105,13 @@ export function BombPassOnline({session,room,me,online,run}:Props) {
   }
   async function exitRoom(){
     if(requestBusy.current)return;
+    if(!isHost&&activeRound){navigate('/');return;}
     requestBusy.current=true;setBusy(true);setError('');
     try{
       if(isHost&&data&&['countdown','playing','exploded'].includes(data.state.status)){
-        await api.bomb<Data>(session,'finish',data.version);
-      }
-      await run(isHost?'close_room':'leave');
+        // Closing a room is already authoritative; no separate finish command can race its deadline.
+        await run('close_room');
+      }else await run(isHost?'close_room':'leave');
       clearSession(session.code);navigate('/');
     }catch(e){setError(messageFor(e));void refresh().catch(()=>undefined);}
     finally{requestBusy.current=false;setBusy(false);}
@@ -181,8 +182,8 @@ export function BombPassOnline({session,room,me,online,run}:Props) {
           <section className="bp-side-panel bp-tip-panel"><span>✦ PARTY TIPS</span><p>목숨도 탈락도 없어. 폭탄을 맞아도 다음 라운드에 다시 참여해!</p></section>
         </aside>
       </div>}
-      <div className="bp-room-options"><button type="button" className="bp-end" aria-pressed={haptics} onClick={()=>setHaptics(v=>!v)}>{haptics?'진동 켜짐':'진동 꺼짐'}</button><button type="button" className="bp-end" disabled={busy} onClick={()=>setConfirmExit(true)}>{isHost?'방 종료하기':'방 나가기'}</button></div>
-      {confirmExit&&<div className="bp-modal-backdrop" role="presentation"><section className="bp-modal" role="dialog" aria-modal="true" aria-labelledby="bp-exit-title"><h2 id="bp-exit-title">{isHost?'방을 종료할까요?':'방에서 나갈까요?'}</h2><p>{isHost?(activeRound?'진행 중인 게임을 끝내고 모든 참가자의 방을 닫아요.':'모든 참가자의 방을 닫아요.'): '방에서 나가면 현재 참가 정보가 삭제돼요.'}</p><div><button type="button" disabled={busy} onClick={()=>setConfirmExit(false)}>취소</button><button type="button" className="bp-confirm" disabled={busy} onClick={()=>void exitRoom()}>{isHost?'방 종료':'나가기'}</button></div></section></div>}
+      <div className="bp-room-options"><button type="button" className="bp-end" aria-pressed={haptics} onClick={()=>setHaptics(v=>!v)}>{haptics?'진동 켜짐':'진동 꺼짐'}</button><button type="button" className="bp-end" disabled={busy} onClick={()=>setConfirmExit(true)}>{isHost?'방 종료하기':activeRound?'홈으로 (참가 유지)':'방 나가기'}</button></div>
+      {confirmExit&&<div className="bp-modal-backdrop" role="presentation"><section className="bp-modal" role="dialog" aria-modal="true" aria-labelledby="bp-exit-title"><h2 id="bp-exit-title">{isHost?'방을 종료할까요?':'방에서 나갈까요?'}</h2><p>{isHost?(activeRound?'진행 중인 게임을 끝내고 모든 참가자의 방을 닫아요.':'모든 참가자의 방을 닫아요.'):activeRound?'진행 중인 라운드에서는 참가 정보를 유지해요. 홈에서 같은 방에 다시 들어올 수 있어요.':'방에서 나가면 현재 참가 정보가 삭제돼요.'}</p><div><button type="button" disabled={busy} onClick={()=>setConfirmExit(false)}>취소</button><button type="button" className="bp-confirm" disabled={busy} onClick={()=>void exitRoom()}>{isHost?'방 종료':'나가기'}</button></div></section></div>}
       <p className="bp-disclaimer">폭발 시각·턴 변경은 서버에서 확정합니다. 브라우저 절전/네트워크 문제 시 화면 반영이 늦을 수 있으며, 다시 접속하면 현재 게임 상태로 동기화됩니다.</p>
     </div>
   </main>;

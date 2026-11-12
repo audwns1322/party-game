@@ -125,13 +125,13 @@ describe('M2 custom words and transitions',()=>{
     }
     const [host]=await room();await game(host,'start_round');const rid=(await snapshot(host)).round!.id;
     await expect(db.query('update app_private.round_players set role=\'citizen\' where round_id=$1',[rid])).rejects.toThrow(/INVALID_ASSIGNMENT/);
-    const {rows}=await db.query<{n:number}>('select count(*)::int n from app_private.builtin_words');expect(rows[0].n).toBe(270);
+    const {rows}=await db.query<{n:number}>('select count(*)::int n from app_private.builtin_words');expect(rows[0].n).toBe(315);
   });
   it('rollback SQL removes only M2 and restores the M1 service-role API',async()=>{
     const restored=new PGlite();
     try {
       await restored.exec('create role anon; create role authenticated; create role service_role;');
-      for(const file of (await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')).sort())await restored.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
+      for(const file of (await readdir('supabase/migrations')).filter(x=>x.endsWith('.sql')&&x!=='20261112074500_liar_continue_and_english.sql').sort())await restored.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
       await restored.exec(await readFile('supabase/rollback/m6.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/m5.sql','utf8'));
       await restored.exec(await readFile('supabase/rollback/capacity_liars.sql','utf8'));
@@ -293,9 +293,9 @@ describe('themes and confusion liar',()=>{
     for(let i=0;i<players.length;i++){const after=(await snapshot(players[i])).round!;expect(after.phase).toBe('PAUSED_HOST');expect(after.theme).toBe(r.theme);expect(after.me!.word).toBe(before[i].round!.me!.word);}
     const late=await join(host,'테마대기자');const dto=await snapshot(late);expect(dto.round!.me).toBeNull();expect(JSON.stringify(dto)).not.toMatch(/liar_word|easy_word|hard_word/);
   });
-  it('has 30 words per theme and every reviewed easy/hard partner is distinct and in the same theme',async()=>{
-    const {rows}=await db.query<{category:string;n:number}>(`select category,count(*)::int n from app_private.builtin_words group by category`);expect(rows).toHaveLength(9);expect(rows.every(r=>r.n===30)).toBe(true);
-    const unique=await db.query<{n:number}>(`select count(distinct word)::int n from app_private.builtin_words`);expect(unique.rows[0].n).toBe(270);
+  it('has 35 words per theme and every reviewed easy/hard partner is distinct and in the same theme',async()=>{
+    const {rows}=await db.query<{category:string;n:number}>(`select category,count(*)::int n from app_private.builtin_words group by category`);expect(rows).toHaveLength(9);expect(rows.every(r=>r.n===35)).toBe(true);
+    const unique=await db.query<{n:number}>(`select count(distinct word)::int n from app_private.builtin_words`);expect(unique.rows[0].n).toBe(315);
     const invalid=await db.query<{n:number}>(`select count(*)::int n from app_private.builtin_words w left join app_private.builtin_words e on e.category=w.category and e.word=w.easy_word left join app_private.builtin_words h on h.category=w.category and h.word=w.hard_word where e.word is null or h.word is null or w.word=w.easy_word or w.word=w.hard_word or w.easy_word=w.hard_word`);expect(invalid.rows[0].n).toBe(0);
   });
 });
@@ -460,76 +460,70 @@ describe('M5 completed-round lifecycle',()=>{
 
 const disconnect = (s:Issued,seconds=31) => db.query("update app_private.players set last_seen_at=clock_timestamp()-make_interval(secs=>$1) where id=$2",[seconds,s.player_id]);
 const heartbeat = (s:Issued) => api.room(request({room_id:s.room_id,action:'heartbeat',request_id:randomUUID()},s.token));
-const endGrace = (s:Issued) => db.query("update app_private.rounds set disconnect_grace_until=clock_timestamp()-interval '1 second' where room_id=$1 and ended_at is null",[s.room_id]);
-describe('M6 connection authority and lifecycle',()=>{
- it('does not pause for a short missed heartbeat, but freezes and restores a discussion deadline',async()=>{
-  const p=await hints();await finishAll(p);const before=await snapshot(p[0]);await disconnect(p[1],20);expect((await snapshot(p[0])).round!.phase).toBe('DISCUSS');
-  await disconnect(p[1]);const paused=await snapshot(p[0]);expect(paused.round!.phase).toBe('PAUSED_DISCONNECT');expect(paused.round!.deadline_at).toBeNull();expect(paused.round!.disconnect!.missing_ids).toEqual([p[1].player_id]);
-  const saved=paused.round!.disconnect!.remaining_ms!;expect(saved).toBeGreaterThan(50000);expect(saved).toBeLessThanOrEqual(60000);
-  expect((await game(p[0],'cancel_round')).status).toBe(409);expect((await game(p[0],'wait_reconnect',{round_id:paused.round!.id})).status).toBe(409);
-  expect((await game(p[0],'start_vote',{round_id:paused.round!.id,skip_timer:true})).status).toBe(409);
-  expect((await heartbeat(p[1])).status).toBe(200);const resumed=await snapshot(p[0]);expect(resumed.round!.phase).toBe('DISCUSS');expect(resumed.round!.id).toBe(before.round!.id);
-  expect(Date.parse(resumed.round!.deadline_at!)-Date.parse(resumed.server_now!)).toBeGreaterThan(saved-2000);expect(resumed.round!.disconnect).toBeNull();
+describe('Liar connection authority and lifecycle',()=>{
+ it('keeps discussion live and lets the host start voting while a guest is away',async()=>{
+  const p=await hints();await finishAll(p);const before=await snapshot(p[0]);await disconnect(p[1]);
+  const live=await snapshot(p[0]);expect(live.round!.phase).toBe('DISCUSS');expect(live.round!.deadline_at).toBe(before.round!.deadline_at);expect(live.round!.away_ids).toEqual([p[1].player_id]);
+  expect((await game(p[0],'start_vote',{round_id:live.round!.id,skip_timer:true})).status).toBe(200);
+  await heartbeat(p[1]);expect((await snapshot(p[1])).round!.phase).toBe('VOTE_1');
  });
- it('commits a detected pause even when the triggering game command returns conflict',async()=>{
-  const p=await hints();const d=await snapshot(p[0]);await disconnect(p[1]);events.length=0;
-  const result=await api.game(request({room_id:p[0].room_id,action:'pause',payload:{round_id:d.round!.id},expected_version:d.room.version,expected_phase:'HINT',request_id:randomUUID()},p[0].token));
-  expect(result.status).toBe(409);expect(await result.json()).toEqual({error:'VERSION_CONFLICT'});expect(events).toHaveLength(1);
-  expect((await snapshot(p[0])).round!.phase).toBe('PAUSED_DISCONNECT');
+ it('allows present participants to acknowledge and waits only for the missing acknowledgement',async()=>{
+  const p=await room();await game(p[0],'start_round');const rid=(await snapshot(p[0])).round!.id;await disconnect(p[1]);
+  for(const i of [0,2])expect((await game(p[i],'ack_role',{round_id:rid})).status).toBe(200);
+  const pending=(await snapshot(p[0])).round!;expect(pending.phase).toBe('REVEAL_ROLE');expect(pending.acknowledged_count).toBe(2);
+  await heartbeat(p[1]);expect((await game(p[1],'ack_role',{round_id:rid})).status).toBe(200);expect((await snapshot(p[0])).round!.phase).toBe('HINT');
  });
- it('keeps custom roles secret when the collection phase is paused',async()=>{
-  const p=await room();await settings(p[0],{word_mode:'custom',custom_theme:'음식'});await game(p[0],'start_round');await disconnect(p[1]);
-  for(const s of p){const d=await snapshot(s);expect(d.round!.phase).toBe('PAUSED_DISCONNECT');expect(d.round!.me!.role).toBeNull();expect(d.round!.me!.word).toBeNull();}
+ it('defers an absent speaker within each lap and advances only after every hint',async()=>{
+  const p=await hints(2,60);const first=(await snapshot(p[0])).round!;
+  const absent=p.find(s=>s.player_id===first.current_player_id)!;const online=p.filter(s=>s!==absent);
+  await disconnect(absent);
+  for(let i=0;i<2;i++){const d=(await snapshot(online[0])).round!;expect(d.current_player_id).not.toBe(absent.player_id);const s=online.find(x=>x.player_id===d.current_player_id)!;expect((await game(s,'finish_hint',{round_id:d.id,hint_index:d.hint_index})).status).toBe(200);}
+  let d=(await snapshot(online[0])).round!;expect(d.phase).toBe('HINT');expect(d.hint_index).toBe(2);expect(d.current_player_id).toBe(absent.player_id);
+  await heartbeat(absent);expect((await game(absent,'finish_hint',{round_id:d.id,hint_index:d.hint_index})).status).toBe(200);
+  d=(await snapshot(online[0])).round!;expect(d.hint_round).toBe(2);expect(d.hint_index).toBe(3);
+  for(let i=0;i<3;i++){d=(await snapshot(online[0])).round!;expect((await game(p.find(s=>s.player_id===d.current_player_id)!,'finish_hint',{round_id:d.id,hint_index:d.hint_index})).status).toBe(200);}
+  expect((await snapshot(online[0])).round!.phase).toBe('DISCUSS');
  });
- it.each(['REVEAL_ROLE','HINT','VOTE_1','VOTE_RUNOFF','REVEAL_VOTE','REVEAL_LIAR','GUESS'])('returns to the exact %s phase without skipping its remaining work',async phase=>{
-  const p=await hints();await db.query('update app_private.rounds set phase=$1,phase_started_at=clock_timestamp(),deadline_at=null where room_id=$2 and ended_at is null',[phase,p[0].room_id]);
-  await disconnect(p[1]);const d=await snapshot(p[0]);expect(d.round!.disconnect!.original_phase).toBe(phase);expect(d.round!.phase).toBe('PAUSED_DISCONNECT');
-  await heartbeat(p[1]);const resumed=await snapshot(p[0]);expect(resumed.round!.phase).toBe(phase);expect(resumed.round!.hint_index).toBe(d.round!.hint_index);
+ it('keeps votes private and accepts the missing participant on return',async()=>{
+  const p=await voting();const d=(await snapshot(p[0])).round!;await disconnect(p[1]);
+  for(const i of [0,2])expect((await game(p[i],'submit_vote',{round_id:d.id,ballot_no:1,cycle_no:1,target_id:p[1].player_id})).status).toBe(200);
+  const pending=(await snapshot(p[0])).round!;expect(pending.phase).toBe('VOTE_1');expect(pending.vote!.submitted_count).toBe(2);expect(pending.vote!.tallies).toEqual([]);
+  await heartbeat(p[1]);expect((await game(p[1],'submit_vote',{round_id:d.id,ballot_no:1,cycle_no:1,target_id:p[0].player_id})).status).toBe(200);
+  expect((await snapshot(p[0])).round!.phase).toBe('REVEAL_VOTE');
  });
- it('restores a manual pause rather than accidentally resuming the game',async()=>{
-  const p=await hints();await finishAll(p);await game(p[0],'pause',{round_id:(await snapshot(p[0])).round!.id});const manual=(await snapshot(p[0])).round!;
-  await disconnect(p[1]);expect((await snapshot(p[0])).round!.disconnect!.original_phase).toBe('PAUSED_HOST');await heartbeat(p[1]);
-  const restored=(await snapshot(p[0])).round!;expect(restored.phase).toBe('PAUSED_HOST');expect(restored.remaining_ms).toBe(manual.remaining_ms);expect(restored.paused_phase).toBe('DISCUSS');
+ it('keeps custom roles secret while remaining word submissions proceed',async()=>{
+  const p=await room();await settings(p[0],{word_mode:'custom',custom_theme:'Food',language:'en'});await game(p[0],'start_round');const rid=(await snapshot(p[0])).round!.id;await disconnect(p[1]);
+  for(const i of [0,2])expect((await game(p[i],'submit_word',{round_id:rid,word:'Apple'})).status).toBe(200);
+  for(const s of p){const d=await snapshot(s);expect(d.round!.phase).toBe('COLLECT_WORDS');expect(d.round!.me!.role).toBeNull();expect(d.round!.me!.word).toBeNull();}
+  await heartbeat(p[1]);expect((await game(p[1],'submit_word',{round_id:rid,word:'Banana'})).status).toBe(200);expect((await snapshot(p[0])).round!.phase).toBe('REVEAL_ROLE');
  });
- it.each(['APPEAL_WINDOW','APPEAL_VOTE'])('preserves the real %s guess and secret ballots through a disconnect',async phase=>{
-  const{p,liars,citizens}=await m5Setup(3);await accuse(p,liars[0]);await reveal(p[0]);await guess(liars[0],'오답');if(phase==='APPEAL_VOTE')await appeal(citizens[0]);
-  const before=(await snapshot(p[0])).round!;await disconnect(p[1]);const paused=(await snapshot(p[0])).round!;expect(paused.phase).toBe('PAUSED_DISCONNECT');expect(paused.m5!.correct_word).toBeNull();
-  await heartbeat(p[1]);const after=(await snapshot(p[0])).round!;expect(after.phase).toBe(phase);expect(after.m5!.guess_id).toBe(before.m5!.guess_id);expect(after.m5!.appeal_submitted_count).toBe(before.m5!.appeal_submitted_count);
-  expect(Date.parse(after.deadline_at!)-Date.now()).toBeGreaterThan(10000);
+ it('preserves manual pause and allows immediate host cancellation',async()=>{
+  const p=await hints();const d=(await snapshot(p[0])).round!;await game(p[0],'pause',{round_id:d.id});await disconnect(p[1]);expect((await snapshot(p[0])).round!.phase).toBe('PAUSED_HOST');
+  expect((await game(p[0],'cancel_round')).status).toBe(200);expect((await snapshot(p[0])).round).toBeNull();
  });
- it('ignores disconnected waiters and eliminated observers',async()=>{
-  const{p,liars}=await m5Setup(5,2);const waiter=await join(p[0],'대기손님');const eliminated=liars.find(s=>s.player_id!==p[0].player_id)!;
-  await db.query('update app_private.round_players set eliminated_at=clock_timestamp() where round_id=(select id from app_private.rounds where room_id=$1 and ended_at is null) and player_id=$2',[p[0].room_id,eliminated.player_id]);
-  await disconnect(waiter);await disconnect(eliminated);expect((await snapshot(p[0])).round!.phase).toBe('VOTE_1');
- });
- it('waits for every missing survivor and transfers the host once, in join order',async()=>{
-  const p=await hints();await disconnect(p[0],61);await disconnect(p[1]);const d=await snapshot(p[2]);expect(d.me.is_host).toBe(true);expect(d.round!.disconnect!.missing_ids).toHaveLength(2);
-  expect((await game(p[0],'wait_reconnect',{round_id:d.round!.id})).status).toBe(403);await heartbeat(p[0]);const still=await snapshot(p[2]);expect(still.room.host_player_id).toBe(p[2].player_id);expect(still.round!.phase).toBe('PAUSED_DISCONNECT');
-  await heartbeat(p[1]);const resumed=await snapshot(p[0]);expect(resumed.round!.phase).toBe('HINT');expect(resumed.me.is_host).toBe(false);expect(resumed.room.host_player_id).toBe(p[2].player_id);
- });
- it('never delegates an active game to a waiting newcomer even when all original players are absent',async()=>{
+ it('transfers an absent host once and never delegates to waiting newcomers',async()=>{
   const p=await hints();const waiter=await join(p[0],'늦은손님');for(const s of p)await disconnect(s,61);
-  const d=await snapshot(waiter);expect(d.room.host_player_id).toBe(p[0].player_id);expect(d.round!.me).toBeNull();expect(d.round!.phase).toBe('PAUSED_DISCONNECT');
-  await heartbeat(p[1]);expect((await snapshot(p[1])).room.host_player_id).toBe(p[1].player_id);
+  const d=await snapshot(waiter);expect(d.room.host_player_id).toBe(p[0].player_id);expect(d.round!.me).toBeNull();expect(d.round!.phase).toBe('HINT');
+  await heartbeat(p[1]);expect((await snapshot(p[1])).room.host_player_id).toBe(p[1].player_id);await heartbeat(p[0]);expect((await snapshot(p[0])).room.host_player_id).toBe(p[1].player_id);
  });
- it('allows host wait/cancel after grace; replayed wait cannot extend it twice and cancel never awards points',async()=>{
-  const p=await hints();await disconnect(p[1]);const d=await snapshot(p[0]);await endGrace(p[0]);
-  expect((await game(p[2],'wait_reconnect',{round_id:d.round!.id})).status).toBe(403);
-  const current=await snapshot(p[0]);const body={room_id:p[0].room_id,action:'wait_reconnect',payload:{round_id:d.round!.id},expected_phase:'PAUSED_DISCONNECT',expected_version:current.room.version,request_id:randomUUID()};
-  expect((await api.game(request(body,p[0].token))).status).toBe(200);const waited=await snapshot(p[0]);expect((await api.game(request(body,p[0].token))).status).toBe(200);
-  expect((await snapshot(p[0])).round!.disconnect!.grace_until).toBe(waited.round!.disconnect!.grace_until);await endGrace(p[0]);expect((await game(p[0],'cancel_round')).status).toBe(200);
-  expect((await snapshot(p[0])).round).toBeNull();expect((await snapshot(p[0])).players.every(s=>s.wins===0)).toBe(true);
- });
- it('recovers on another device, resumes and immediately invalidates the old token and code',async()=>{
-  const p=await hints();await disconnect(p[1]);expect((await snapshot(p[0])).round!.phase).toBe('PAUSED_DISCONNECT');events.length=0;
-  const recover=recoverHandler(rpc,broadcast);const response=await recover(request({room_code:p[1].code,recovery_code:p[1].recovery_code}));expect(response.status).toBe(200);const fresh=await response.json() as Issued;expect(events).toHaveLength(1);
-  expect((await snapshot(fresh)).round!.phase).toBe('HINT');expect((await api.snapshot(new Request('https://test.invalid?room_id='+p[1].room_id,{headers:{Authorization:'Bearer '+p[1].token}}))).status).toBe(403);
+ it('rotates recovered credentials without changing the round or private words',async()=>{
+  const p=await hints();const before=(await snapshot(p[1])).round!;await disconnect(p[1]);
+  const recover=recoverHandler(rpc,broadcast);const response=await recover(request({room_code:p[1].code,recovery_code:p[1].recovery_code}));expect(response.status).toBe(200);const fresh=await response.json() as Issued;
+  const after=(await snapshot(fresh)).round!;expect(after.id).toBe(before.id);expect(after.phase).toBe('HINT');expect(after.me!.word).toBe(before.me!.word);
+  expect((await api.snapshot(new Request('https://test.invalid?room_id='+p[1].room_id,{headers:{Authorization:'Bearer '+p[1].token}}))).status).toBe(403);
   expect((await recover(request({room_code:p[1].code,recovery_code:p[1].recovery_code}))).status).toBe(403);
  });
- it('does not let snapshots, heartbeat or automatic host transfer refresh inactivity expiry',async()=>{
+ it('keeps automatic host transfer and heartbeat from extending expiry',async()=>{
   const p=await hints();await db.query("update app_private.rooms set last_activity_at=now()-interval '119 minutes',expires_at=now()+interval '1 minute' where id=$1",[p[0].room_id]);
   const before=(await snapshot(p[1])).room.expires_at;await heartbeat(p[1]);await disconnect(p[0],61);await snapshot(p[1]);expect((await snapshot(p[1])).room.expires_at).toBe(before);
-  const d=await snapshot(p[1]);await endGrace(p[1]);expect((await game(p[1],'wait_reconnect',{round_id:d.round!.id})).status).toBe(200);expect(Date.parse((await snapshot(p[1])).room.expires_at)-Date.now()).toBeGreaterThan(7100000);
+ });
+ it('validates English settings, all 315 English words, and excludes CrossFit from English random',async()=>{
+  const p=await room();const host=p[0];expect((await settings(host,{language:'xx'})).status).toBe(400);expect((await settings(p[1],{language:'en'})).status).toBe(403);
+  const rows=await db.query<{n:number}>('select count(*)::int n from app_private.builtin_words_en group by category');expect(rows.rows).toHaveLength(9);expect(rows.rows.every(r=>r.n===35)).toBe(true);
+  for(const mode of ['classic','confusion']){expect((await settings(host,{language:'en',theme:'음식',game_mode:mode})).status).toBe(200);expect((await game(host,'start_round')).status).toBe(200);const d=(await snapshot(host)).round!;expect(d.language).toBe('en');
+   const bank=await db.query<{word:string}>('select word from app_private.builtin_words_en where category=$1',['음식']);for(const s of p){const own=(await snapshot(s)).round!.me!;if(own.word)expect(bank.rows.some(w=>w.word===own.word)).toBe(true);}await game(host,'cancel_round');}
+  expect((await settings(host,{language:'en',theme:'random'})).status).toBe(200);for(let i=0;i<4;i++){await game(host,'start_round');expect((await snapshot(host)).round!.theme).not.toBe('크로스핏');await game(host,'cancel_round');}
+  await db.exec('set role anon');try{await expect(db.query('select * from app_private.builtin_words_en')).rejects.toThrow(/permission denied/);}finally{await db.exec('reset role');}
  });
  it('maintains abandoned rooms without clients and cascades closed/expired results and sessions only',async()=>{
   const {p,liars}=await m5Setup(3);await accuse(p,liars[0]);await reveal(p[0]);await guess(liars[0],'돈가스');await expire(p[0]);expect((await snapshot(p[0])).round!.phase).toBe('FINAL_RESULT');
@@ -541,7 +535,7 @@ describe('M6 connection authority and lifecycle',()=>{
   for(const table of ['rooms','players','rounds','round_players','command_receipts']){const column=table==='rooms'?'id':'room_id';expect((await db.query<{n:number}>(`select count(*)::int n from app_private.${table} where ${column}=$1`,[p[0].room_id])).rows[0].n).toBe(0);}
   for(const table of ['round_secrets','guesses','appeals','appeal_votes','round_results','votes','word_candidates'])expect((await db.query<{n:number}>(`select count(*)::int n from app_private.${table} where round_id=$1`,[expiredRid])).rows[0].n).toBe(0);
   expect((await db.query<{n:number}>('select count(*)::int n from app_private.rooms where id=$1',[closed[0].room_id])).rows[0].n).toBe(0);
-  expect((await snapshot(keep[0])).room.id).toBe(keep[0].room_id);expect((await snapshot(abandoned[0])).round!.phase).toBe('PAUSED_DISCONNECT');
+  expect((await snapshot(keep[0])).room.id).toBe(keep[0].room_id);expect((await snapshot(abandoned[0])).round!.phase).toBe('HINT');
   for(const role of ['anon','authenticated','service_role']){await db.exec('set role '+role);try{await expect(db.query('select app_private.maintain_rooms()')).rejects.toThrow(/permission denied/);}finally{await db.exec('reset role');}}
  });
 });

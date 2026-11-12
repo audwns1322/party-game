@@ -1,5 +1,12 @@
 # HANDOFF (2026-10-29)
 
+## 폭탄 돌리기 BOMB-2 서버 연결 QA (2026-11-12, `codex/bomb-pass-mvp`)
+- 사용자 승인 후 실제 Supabase DB에서 3개 독립 참가자 자격증명으로 방 생성/입장, 인증 차단, 상태 공유, stale version·중도 입장·마감 후 패스 차단, 폭발/다음 라운드/종료 등 11개 SQL 검증 통과. 테스트 트랜잭션 롤백으로 신규 방 0개. Edge/브라우저 E2E와 구분한다.
+- 기존 배포 함수 본문과 권한을 보존하고 공통 CORS allowlist에 폭탄 전용 stable preview origin `https://party-game-git-codex-bomb-pass-mvp-audwns1322.vercel.app`만 추가. `bomb-command` v2, `room-create` v7, `room-join` v5, `room-snapshot` v6, `room-command` v12, `player-recover` v5 ACTIVE 및 소스 재조회 일치. 운영 도메인·localhost·환경변수 허용 목록 유지. Vercel 로그인 보호는 해제하지 않음.
+- GitHub CI 기존 실패 원인: `scripts/quoridor-smoke.mjs`의 console 미정의/미사용 대입 10건. 테스트 스크립트만 최소 정리, 게임 동작 변경 없음. `test:sql`에 폭탄 통합 테스트 포함.
+- 신규 `tests/integration/bomb-pass-remote.mjs`: 6개 API의 preview CORS 및 미허용 origin, 3인 실제 HTTP 세션, 권한/비밀 시각/랜덤 차례/중복·stale 답/폭발/수동 다음 라운드/종료/복구, 기존 게임 생성·입장·조회 검증. 토큰 출력 금지, 종료 방은 기존 유지보수로 정리. `SUPABASE_TEST_PUBLIC_KEY`는 선택 환경설정(공개 키만); 직접 실행 환경은 외부 DNS 연결 불가. 실제 CI 실행 결과를 확인하기 전 통과로 간주하지 않음.
+- shortcut: 미리보기 로그인·iOS/Android 실기기 음향/진동/화면 동기화와 방장 이탈은 별도 실기기 QA 필요. `main` 병합·운영 프런트엔드 배포 없음.
+
 ## 폭탄 돌리기 정식 게임화 (2026-11-11, `codex/bomb-pass-mvp`)
 - 사용자 결정: **기존 main 직접 변경 금지**. 현재 브랜치에서 충분히 테스트한 후 승인받아 병합한다. 현장 한 대의 폰(`/bomb-pass/local`)과 온라인 각자 폰(홈의 폭탄 돌리기 방 생성) 두 방식을 지원한다.
 - 기존 Room/QR/복구 코드/Realtime 알림을 재사용하고 온라인은 서버가 보관하는 비공개 무작위 폭발 시각, 3초 카운트다운, 최대 3분, 순서대로 돌리기/랜덤 지목, 말하기+버튼/텍스트, 3~15명, 방장 다음 라운드/종료, 목숨·탈락 없는 무제한 진행을 지원한다. 주제 65개, Web Audio 폭발 효과음(브라우저 최초 터치 활성화 필요).

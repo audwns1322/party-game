@@ -213,6 +213,7 @@ function useRosterAnnouncement(players: Player[] | undefined, hostId: string | u
   return { message, hostChange };
 }
 
+const THEME_EN:Record<string,string>={"음식":"Food","동물":"Animals","생활용품":"Everyday objects","장소":"Places","취미":"Hobbies","자연":"Nature","운동":"Sports","크로스핏":"CrossFit","여행":"Travel"};
 export function Lobby({ session }: { session: StoredSession }) {
   const { snapshot, fatal, online, run, runGame, refresh } = useRoom(session);
   const [error, setError] = useState('');
@@ -270,6 +271,8 @@ export function Lobby({ session }: { session: StoredSession }) {
   if (room.game_type === 'quoridor') return <QuoridorOnline session={session} room={room} me={me} players={players} online={online} />;
   if (room.game_type === 'bomb-pass') return <BombPassOnline session={session} room={room} me={me} players={players} online={online} run={run} />;
   const round = snapshot.round;
+  const en=room.game_type==='liar' && room.settings.language==='en';
+  const t=(ko:string,english:string)=>en?english:ko;
   const play = async (action: string,payload?: object) => {
     setBusy(true); setError('');
     try { await runGame(action,payload); } catch (e) { setError(messageFor(e)); } finally { setBusy(false); }
@@ -290,17 +293,17 @@ export function Lobby({ session }: { session: StoredSession }) {
 
   return (
     <main>
-      {!online && <p className="banner" role="status">연결이 끊겼어요. 다시 연결하는 중…</p>}
+      {!online && <p className="banner" role="status">{t("연결이 끊겼어요. 다시 연결하는 중…","Reconnecting… Your game is saved.")}</p>}
       <p className="sr-only" aria-live="polite">{announcement}</p>
       {hostChange && <p role="status" className="notice">{hostChange}</p>}
 
-      <span className="badge">{room.game_type === 'mafia' ? '마피아' : '라이어'} 대기실 · 방 코드</span>
+      <span className="badge">{room.game_type === 'mafia' ? '마피아 대기실 · 방 코드' : t('라이어 대기실 · 방 코드','LIAR GAME · Room code')}</span>
       <h1 className="code" aria-label={`방 코드 ${room.code.split('').join(' ')}`}>{room.code}</h1>
       <div className="row">
-        <button type="button" className="primary" onClick={share}>친구 초대하기</button>
+        <button type="button" className="primary" onClick={share}>{t("친구 초대하기","Invite friends")}</button>
       </div>
       <details className="card">
-        <summary>QR 코드로 초대</summary>
+        <summary>{t("QR 코드로 초대","Invite by QR code")}</summary>
         {qr && <img className="qr" src={qr} alt="이 방 초대 QR 코드" width={180} height={180} />}
       </details>
 
@@ -310,19 +313,19 @@ export function Lobby({ session }: { session: StoredSession }) {
       {mafiaCard}
 
       <section className="card" aria-labelledby="roster">
-        <h2 id="roster">참가자 {players.length}/{MAX_PLAYERS}{room.locked && <span className="tag">입장 잠김</span>}</h2>
+        <h2 id="roster">{t('참가자','Players')} {players.length}/{MAX_PLAYERS}{room.locked && <span className="tag">{t("입장 잠김","Room locked")}</span>}</h2>
         <ul className="roster">
           {players.map((p) => (
             <li key={p.id}>
               <span className="name">{p.nickname}</span>
-              {p.id === room.host_player_id && <span className="tag host">방장</span>}
-              {p.id === me.player_id && <span className="tag">나</span>}
-              {p.status === 'waiting_next_round' && <span className="tag">다음 판 대기</span>}
-              <span className={`tag ${p.connected ? 'on' : 'off'}`}>{p.connected ? '접속 중' : '자리 비움'}</span>
+              {p.id === room.host_player_id && <span className="tag host">{t("방장","Host")}</span>}
+              {p.id === me.player_id && <span className="tag">{t("나","You")}</span>}
+              {p.status === 'waiting_next_round' && <span className="tag">{t("다음 판 대기","Waiting for next round")}</span>}
+              <span className={`tag ${p.connected ? 'on' : 'off'}`}>{p.connected ? t("접속 중","Online") : t("자리 비움","Away")}</span>
               {isHost && p.id !== me.player_id && (
                 <button type="button" className="mini" disabled={busy || Boolean(round)}
                   onClick={() => (armed === `kick:${p.id}` ? void act('kick', { player_id: p.id }) : arm(`kick:${p.id}`))}>
-                  {armed === `kick:${p.id}` ? '정말 내보내기' : '내보내기'}
+                  {armed === `kick:${p.id}` ? t("정말 내보내기","Confirm removal") : t("내보내기","Remove")}
                 </button>
               )}
             </li>
@@ -332,90 +335,91 @@ export function Lobby({ session }: { session: StoredSession }) {
 
       {room.game_type === 'mafia' ? null : round ? <RoundPanel key={`${round.id}:${round.phase}`} snapshot={snapshot} busy={busy} run={play} /> : isHost ? (
         <button className="primary" disabled={busy || !online || needsTheme || players.length < MIN_PLAYERS || players.some(p => !p.connected)} onClick={() => void play('start_round')}>
-          {needsTheme ? '게임 설정에서 테마를 저장해 주세요' : players.length < MIN_PLAYERS ? `${MIN_PLAYERS}명 이상 모이면 시작할 수 있어요` : '게임 시작 · 역할 배정'}
+          {needsTheme ? t("게임 설정에서 테마를 저장해 주세요","Save the category in settings first") : players.length < MIN_PLAYERS ? t(`${MIN_PLAYERS}명 이상 모이면 시작할 수 있어요`,`At least ${MIN_PLAYERS} players required`) : t("게임 시작 · 역할 배정","Start game · Assign roles")}
         </button>
-      ) : <p className="hint">방장이 게임을 시작하면 자동으로 넘어가요.</p>}
+      ) : <p className="hint">{t("방장이 게임을 시작하면 자동으로 넘어가요.","Waiting for the host to start.")}</p>}
 
       {room.game_type === 'mafia' ? !snapshot.mafia && <MafiaSettings roles={room.settings.mafia_roles ?? {mafia:1,spy:0,citizen:2,police:1,doctor:0,journalist:0,traitor:0}} participants={players.length} editable={isHost && !busy && online} save={roles=>act('update_settings',{mafia_roles:roles})}/> : <details className="card" open={isHost}>
-        <summary>게임 설정 {isHost ? '' : '(방장만 변경)'}</summary>
+        <summary>{t('게임 설정','Game settings')} {isHost ? '' : t('(방장만 변경)','(Host only)')}</summary>
+        <label>{t('게임 언어','Game language')}<select disabled={!isHost || busy || Boolean(round)} value={room.settings.language ?? 'ko'} onChange={e=>void setting({language:e.target.value as 'ko'|'en'})}><option value="ko">한국어</option><option value="en">English</option></select></label>
         <label>제시어
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.word_mode} onChange={(e) => setting({ word_mode: e.target.value as Settings['word_mode'],game_mode:'classic' })}>
-            <option value="builtin">기본 제시어</option>
-            <option value="custom">직접 입력</option>
+            <option value="builtin">{t("기본 제시어","Built-in words")}</option>
+            <option value="custom">{t("직접 입력","Custom words")}</option>
           </select>
         </label>
         {room.settings.word_mode === 'builtin' ? <>
           <label>테마
             <select disabled={!isHost || busy || Boolean(round)} value={room.settings.theme ?? 'random'} onChange={e => void setting({theme:e.target.value as Settings['theme']})}>
-              <option value="random">랜덤 테마</option>
-              {THEMES.map(theme => <option key={theme}>{theme}</option>)}
+              <option value="random">{t("랜덤 테마","Random category")}</option>
+              {THEMES.map(theme => <option key={theme} value={theme}>{en?THEME_EN[theme]:theme}</option>)}
             </select>
           </label>
-          {room.settings.theme === '크로스핏' && <p className="hint">크로스핏 동작 용어를 아는 참가자끼리 선택해 주세요.</p>}
+          {room.settings.theme === '크로스핏' && <p className="hint">{t("크로스핏 동작 용어를 아는 참가자끼리 선택해 주세요.","Choose CrossFit only if everyone knows the movements.")}</p>}
           <label>게임 방식
             <select disabled={!isHost || busy || Boolean(round)} value={room.settings.game_mode ?? 'classic'} onChange={e => void setting({game_mode:e.target.value as Settings['game_mode']})}>
-              <option value="classic">기본 라이어</option><option value="confusion">혼선 라이어</option>
+              <option value="classic">{t("기본 라이어","Classic liar")}</option><option value="confusion">{t("혼선 라이어","Confusion liar")}</option>
             </select>
           </label>
           {room.settings.game_mode === 'confusion' && <label>라이어 난이도
             <select disabled={!isHost || busy || Boolean(round)} value={room.settings.difficulty ?? 'easy'} onChange={e => void setting({difficulty:e.target.value as Settings['difficulty']})}>
-              <option value="easy">이지 · 비슷한 제시어</option><option value="hard">하드 · 차이가 큰 제시어</option>
+              <option value="easy">{t("이지 · 비슷한 제시어","Easy · Similar words")}</option><option value="hard">{t("하드 · 차이가 큰 제시어","Hard · Different words")}</option>
             </select>
           </label>}
-          <p className="hint">{room.settings.game_mode === 'confusion' ? '라이어도 같은 테마의 다른 제시어를 받아요. 난이도는 라이어 기준이에요.' : '라이어는 테마만 알고, 제시어는 받지 않아요.'}</p>
+          <p className="hint">{room.settings.game_mode === 'confusion' ? t("라이어도 같은 테마의 다른 제시어를 받아요. 난이도는 라이어 기준이에요.","The liar gets a different word from the same category.") : t("라이어는 테마만 알고, 제시어는 받지 않아요.","The liar knows the category but not the secret word.")}</p>
         </> : <>
           <form key={`${room.id}:${room.settings.custom_theme ?? ''}`} onSubmit={event => {
             event.preventDefault();
             void setting({custom_theme:String(new FormData(event.currentTarget).get('theme') ?? '')});
           }}>
-            <label>공통 테마<input name="theme" defaultValue={room.settings.custom_theme ?? ''} maxLength={60} placeholder="예: 음식, 우리 학교" disabled={!isHost || busy || Boolean(round)} required /></label>
-            {isHost && <button disabled={busy || Boolean(round)}>테마 저장</button>}
+            <label>{t("공통 테마","Shared category")}<input name="theme" defaultValue={room.settings.custom_theme ?? ''} maxLength={60} placeholder="예: 음식, 우리 학교" disabled={!isHost || busy || Boolean(round)} required /></label>
+            {isHost && <button disabled={busy || Boolean(round)}>{t("테마 저장","Save category")}</button>}
           </form>
-          <p className="hint">기본 라이어로 진행해요. 각자 테마에 맞는 단어 하나만 제출해 주세요.</p>
+          <p className="hint">{t("기본 라이어로 진행해요. 각자 테마에 맞는 단어 하나만 제출해 주세요.","Classic mode. Everyone submits one word for the category.")}</p>
         </>}
         <label>힌트 바퀴 수
-          <span className="hint">라이어 수와 힌트 바퀴 수는 시작 후 바꿀 수 없어요.</span>
+          <span className="hint">{t("라이어 수와 힌트 바퀴 수는 시작 후 바꿀 수 없어요.","Liar count and clue rounds cannot change after starting.")}</span>
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.hint_rounds} onChange={(e) => setting({ hint_rounds: Number(e.target.value) as Settings['hint_rounds'] })}>
-            {[1, 2, 3].map((n) => <option key={n} value={n}>{n}바퀴</option>)}
+            {[1, 2, 3].map((n) => <option key={n} value={n}>{n}{t('바퀴',' rounds')}</option>)}
           </select>
         </label>
         <label>라이어 수
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.liar_count ?? 1} onChange={e => void setting({liar_count:Number(e.target.value) as 1 | 2})}>
-            <option value={1}>1명</option><option value={2}>2명</option>
+            <option value={1}>{t("1명","1 player")}</option><option value={2}>{t("2명","2 players")}</option>
           </select>
         </label>
-        {room.settings.liar_count === 2 && <p className="hint">2명 모두 잡아야 시민 팀이 이겨요. 5명 이상일 때 권장해요.</p>}
+        {room.settings.liar_count === 2 && <p className="hint">{t("2명 모두 잡아야 시민 팀이 이겨요. 5명 이상일 때 권장해요.","Citizens must catch both liars. Recommended for 5+ players.")}</p>}
         <label>토론 시간
           <select disabled={!isHost || busy || Boolean(round)} value={room.settings.discussion_seconds} onChange={(e) => setting({ discussion_seconds: Number(e.target.value) as Settings['discussion_seconds'] })}>
-            {[60, 120, 180, 300].map((s) => <option key={s} value={s}>{s / 60}분</option>)}
-            <option value={0}>무제한</option>
+            {[60, 120, 180, 300].map((s) => <option key={s} value={s}>{s / 60}{t('분',' min')}</option>)}
+            <option value={0}>{t("무제한","No limit")}</option>
           </select>
         </label>
         {isHost && (
           <button type="button" disabled={busy} onClick={() => void act('lock', { locked: !room.locked })}>
-            {room.locked ? '새 참가 다시 받기' : '새 참가 막기 (모르는 사람 차단)'}
+            {room.locked ? t("새 참가 다시 받기","Unlock room") : t("새 참가 막기 (모르는 사람 차단)","Lock room")}
           </button>
         )}
       </details>}
 
       {session.recovery_code && (
         <details className="card">
-          <summary>다른 기기로 옮기기</summary>
-          <p>폰을 바꾸거나 다른 브라우저로 이어서 할 때 이 코드를 입력하세요. 코드를 쓰면 지금 기기는 자동으로 빠져요.</p>
+          <summary>{t("다른 기기로 옮기기","Continue on another device")}</summary>
+          <p>{t("폰을 바꾸거나 다른 브라우저로 이어서 할 때 이 코드를 입력하세요. 코드를 쓰면 지금 기기는 자동으로 빠져요.","Use this code on another device or browser. The previous device will be signed out.")}</p>
           <p className="recovery" aria-label="이어하기 코드">{session.recovery_code}</p>
-          <button type="button" onClick={copyRecovery}>코드 복사</button>
+          <button type="button" onClick={copyRecovery}>{t("코드 복사","Copy recovery code")}</button>
         </details>
       )}
 
       <p className="notice">사용자 조작 없이 2시간이 지나면 방이 만료돼요. 종료·만료된 방의 참가 정보와 전적은 정리 작업으로 삭제돼요. 서버 백업은 별도 보존 정책을 따라요.</p>
       <button type="button" disabled={busy || Boolean(round?.me)}
         onClick={() => (armed === 'leave' ? void act('leave').then((ok) => { if (ok) { clearSession(session.code); navigate('/'); } }) : arm('leave'))}>
-        {armed === 'leave' ? '한 번 더 누르면 나가요' : '방 나가기'}
+        {armed === 'leave' ? t("한 번 더 누르면 나가요","Tap again to leave") : t("방 나가기","Leave room")}
       </button>
       {isHost && (
         <button type="button" className="danger" disabled={busy}
           onClick={() => (armed === 'close' ? void act('close_room') : arm('close'))}>
-          {armed === 'close' ? '한 번 더 누르면 모두 나가요' : '방 종료'}
+          {armed === 'close' ? t("한 번 더 누르면 모두 나가요","Tap again to close for everyone") : t("방 종료","Close room")}
         </button>
       )}
     </main>

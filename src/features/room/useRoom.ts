@@ -9,7 +9,7 @@ const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const realtime = url && key ? createPublicClient(url, key) : null;
 
-const isFatal = (error: unknown) => error instanceof ApiError && (error.status === 401 || error.status === 403 || error.status === 410);
+const isFatal = (error: unknown) => error instanceof ApiError && (error.code === 'ROOM_CLOSED' || error.code === 'FORBIDDEN' || error.code === 'UNAUTHORIZED');
 type GameRequest = Parameters<typeof api.game>[1];
 export function canReuseGameRequest(previous: GameRequest | null, current: Omit<GameRequest,'request_id'>): previous is GameRequest {
   return previous?.action === current.action && previous.expected_version === current.expected_version
@@ -55,48 +55,53 @@ export function useRoom(session: Session) {
   useEffect(() => {
     let stopped = false;
     let ticks = 0;
+    let beating = false;
+    let failed = false;
     const stop = () => { stopped = true; clearInterval(timer); };
     const beat = async () => {
-      if (stopped) return;
+      if (stopped || beating) return;
+      beating = true;
       try {
         const { version: latest } = await api.command(session, 'heartbeat');
         if (stopped) return;
         setOnline(true);
+        const recovered=failed;failed=false;
         // Presence ("접속 중/자리 비움") changes without a version bump, so re-read it every ~30s too.
         ticks += 1;
-        if (latest !== version.current || ticks % 3 === 0) await refresh();
+        if (recovered || latest !== version.current || ticks % 3 === 0) await refresh();
       } catch (error) {
         if (stopped) return;
         // Closed room / kicked / rotated: stop polling instead of retrying forever.
-        if (isFatal(error)) { stop(); setFatal(error as ApiError); } else setOnline(false);
-      }
+        if (isFatal(error)) { stop(); setFatal(error as ApiError); } else { failed=true;setOnline(false); }
+      } finally { beating=false; }
     };
     const timer = setInterval(beat, HEARTBEAT_MS);
     void refresh().then(beat);
-    const wake = () => { if (document.visibilityState === 'visible') void beat(); };
+    const wake = () => { if (document.visibilityState === 'visible') { void beat();void refresh(); } };
     const offline = () => setOnline(false);
     document.addEventListener('visibilitychange', wake);
     addEventListener('online', wake);
+    addEventListener('focus', wake);
     addEventListener('offline', offline);
     const unsubscribe = realtime ? subscribeToRoomVersion(realtime, session.room_id, () => void refresh()) : () => undefined;
     return () => {
       stop();
       document.removeEventListener('visibilitychange', wake);
-      removeEventListener('online', wake); removeEventListener('offline', offline);
+      removeEventListener('online', wake); removeEventListener('focus',wake); removeEventListener('offline', offline);
       void unsubscribe();
     };
   }, [session, refresh]);
 
   useEffect(() => {
-    if (fatal || !['DISCUSS','REVEAL_VOTE','REVEAL_LIAR','APPEAL_WINDOW','APPEAL_VOTE','PAUSED_DISCONNECT'].includes(snapshot?.round?.phase ?? '') || !(snapshot?.round?.deadline_at || snapshot?.round?.disconnect?.grace_until)) return;
+    if (fatal || snapshot?.room.game_type!=='liar' || !snapshot.round) return;
     let active = false;
     const timer = setInterval(async () => {
       if (active || document.visibilityState !== 'visible') return;
       active = true;
       try { await refresh(); } finally { active = false; }
-    }, 2000);
+    }, snapshot.round.deadline_at ? 2000 : 5000);
     return () => clearInterval(timer);
-  }, [fatal, snapshot?.round?.phase, snapshot?.round?.deadline_at, snapshot?.round?.disconnect?.grace_until, refresh]);
+  }, [fatal, snapshot?.room.game_type, snapshot?.round?.id, snapshot?.round?.phase, snapshot?.round?.deadline_at, refresh]);
 
   /**
    * Run a versioned command. Lobby actions are intent-based, so a VERSION_CONFLICT caused by someone

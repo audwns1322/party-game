@@ -7,6 +7,7 @@ export type MafiaRole = typeof MAFIA_ROLES[number];
 export type MafiaRoles = Record<MafiaRole, number>;
 export const THEMES = ['음식','동물','생활용품','장소','취미','자연','운동','크로스핏','여행'] as const;
 export type Settings = {
+  language?: 'ko' | 'en';
   word_mode: 'builtin' | 'custom'; hint_rounds: 1 | 2 | 3; discussion_seconds: 0 | 60 | 120 | 180 | 300;
   theme?: 'random' | typeof THEMES[number]; custom_theme?: string;
   game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard'; liar_count?: 1 | 2;
@@ -18,6 +19,7 @@ export type RoundSnapshot = {
   id: string; phase: Exclude<GamePhase,'LOBBY'>; version: number; participant_ids: string[];
   submitted_count: number; acknowledged_count: number;
   liar_count?: 1 | 2;
+  language?: 'ko' | 'en'; away_ids?: string[]; hint_pending_ids?: string[];
   theme?: string; game_mode?: 'classic' | 'confusion'; difficulty?: 'easy' | 'hard';
   hint_index: number; hint_round: number; hint_rounds: number; current_player_id: string | null;
   deadline_at: string | null; remaining_ms: number | null; paused_phase: 'HINT' | 'DISCUSS' | null;

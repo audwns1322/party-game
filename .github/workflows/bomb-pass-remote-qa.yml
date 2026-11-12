@@ -1,0 +1,26 @@
+name: Bomb Pass remote QA
+on:
+  push:
+    branches: [codex/bomb-pass-mvp]
+    paths:
+      - 'tests/integration/bomb-pass-remote.mjs'
+      - '.github/workflows/bomb-pass-remote-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bomb-pass-remote-qa
+  cancel-in-progress: false
+jobs:
+  smoke:
+    if: github.ref == 'refs/heads/codex/bomb-pass-mvp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node tests/integration/bomb-pass-remote.mjs
+        env:
+          SUPABASE_TEST_PUBLIC_KEY: ${{ vars.SUPABASE_TEST_PUBLIC_KEY }}

@@ -1,6 +1,7 @@
 // Run against a deployed Supabase project using independent credential tokens.
 // Required: SUPABASE_TEST_URL, SUPABASE_TEST_PUBLIC_KEY (publishable, never service_role).
 import assert from 'node:assert/strict';
+import console from 'node:console';
 const base=process.env.SUPABASE_TEST_URL;
 const key=process.env.SUPABASE_TEST_PUBLIC_KEY;
 if(!base||!key) throw new Error('Set SUPABASE_TEST_URL and SUPABASE_TEST_PUBLIC_KEY');
@@ -37,12 +38,12 @@ g=await snapshot(guest);
 assert.deepEqual(g.state.game.positions[0],[8,4]);
 assert.equal(g.state.game.currentPlayer,0);
 console.log('✓ server-authoritative undo synchronized');
-h=await snapshot(host,'wall',{wall:{r:4,c:4,vertical:false}},h.version);
+await snapshot(host,'wall',{wall:{r:4,c:4,vertical:false}},h.version);
 g=await snapshot(guest);
 assert.equal(g.state.game.walls.length,1);
 assert.equal(g.state.game.currentPlayer,1);
 console.log('✓ wall placement synchronized and turn advanced');
-g=await snapshot(guest,'move',{to:[1,4]},g.version);
+await snapshot(guest,'move',{to:[1,4]},g.version);
 h=await snapshot(host);
 assert.deepEqual(h.state.game.positions[1],[1,4]);
 console.log('✓ second phone moved; first phone saw the result');

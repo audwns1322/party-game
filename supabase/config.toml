@@ -48,3 +48,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.room-command]
 verify_jwt = false
+[functions.bomb-command]
+verify_jwt = false

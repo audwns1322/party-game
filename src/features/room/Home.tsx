@@ -69,6 +69,9 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
             <button type="button" className={gameType==='quoridor'?'game-option selected':'game-option'} aria-pressed={gameType==='quoridor'} onClick={()=>setGameType('quoridor')}>
               <span aria-hidden="true">♟️</span><strong>쿼리도 온라인</strong>
             </button>
+            <button type="button" className={gameType==='bomb-pass'?'game-option selected':'game-option'} aria-pressed={gameType==='bomb-pass'} onClick={()=>setGameType('bomb-pass')}>
+              <span aria-hidden="true">💣</span><strong>폭탄 돌리기</strong>
+            </button>
           </div>
         </fieldset>}
         {mode === 'join' && (
@@ -87,6 +90,12 @@ export function Home({ onIssued }: { onIssued: (issued: Issued, nickname: string
         <h2 id="quoridor-preview-title">쿼리도 3D 연습판</h2>
         <p>온라인 대전을 시작하려면 위에서 쿼리도를 선택하고 방을 만드세요. 혼자 조작을 연습할 수도 있어요.</p>
         <button type="button" onClick={() => navigate('/quoridor-preview')}>혼자 연습하기</button>
+      </section>
+      <section className="card" aria-labelledby="bomb-pass-preview-title">
+        <h2 id="bomb-pass-preview-title">💣 폭탄 돌리기 · 현장 플레이</h2>
+        <p>한 대의 폰을 돌려 쓰고 싶다면 현장 모드를 선택하세요. 각자 휴대폰으로 접속하려면 위에서 폭탄 돌리기 방을 만드세요.</p>
+        <button type="button" onClick={() => navigate('/bomb-pass/local')}>한 대의 폰으로 시작하기</button>
+        <button type="button" onClick={() => navigate('/bomb-pass-preview')}>디자인 테스트 화면 보기</button>
       </section>
       <details className="card">
         <summary>홈 화면에 앱처럼 설치하기</summary>

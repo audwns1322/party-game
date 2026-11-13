@@ -63,8 +63,8 @@ function MafiaDisconnectPanel({mafia,players,isHost,act,busy,serverNow}: {mafia:
   const now=clock.base+(clock.now-clock.sampled);
   const remaining=Math.max(0,Math.ceil((Date.parse(mafia.disconnect?.grace_until??'')-now)/1000)||0);
   return <section className="card">
-    <h2>참가자 연결을 기다리고 있어요</h2>
-    <p>연결이 끊긴 생존자가 있어 게임을 잠시 멈췄어요. 다시 접속하면 자동으로 이어집니다.</p>
+    <h2>참가자 연결 확인</h2>
+    <p>{mafia.phase==='PAUSED_DISCONNECT'?'연결 상태를 확인하고 있어요.':'90초 이상 접속 신호가 없는 참가자가 있어요. 연결된 사람은 계속 행동할 수 있습니다. 필요한 행동은 모두 완료될 때까지 기다려요.'}</p>
     <p>재접속 대기: {mafia.disconnect?.missing_ids.map(id=>players.find(p=>p.id===id)?.nickname??'참가자').join(', ')||'연결 확인 중'}</p>
     {isHost && <>
       {remaining>0 && <p>방장 선택까지 약 {remaining}초 남았어요.</p>}
@@ -308,6 +308,7 @@ export function Lobby({ session }: { session: StoredSession }) {
       {notice && <p role="status" className="notice">{notice}</p>}
       {room.game_type==='mafia' && snapshot.mafia && <MafiaNarrator key={snapshot.mafia.id} mafia={snapshot.mafia} players={players} isHost={isHost}/>}
       {mafiaCard}
+      {room.game_type==='mafia' && snapshot.mafia?.phase!=='PAUSED_DISCONNECT' && snapshot.mafia?.disconnect && <MafiaDisconnectPanel key={snapshot.mafia.id} mafia={snapshot.mafia} players={players} isHost={isHost} act={act} busy={busy} serverNow={snapshot.server_now}/>}
 
       <section className="card" aria-labelledby="roster">
         <h2 id="roster">참가자 {players.length}/{MAX_PLAYERS}{room.locked && <span className="tag">입장 잠김</span>}</h2>

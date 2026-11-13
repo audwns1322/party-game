@@ -65,28 +65,41 @@ it('rejects attacks on known mafia teammates without blocking a spy target',asyn
   await command(0,'mafia_night_action',{target_id:seats[2].id});
 });
 
-it('pauses on an offline living player, rejects votes, and resumes after reconnect',async()=>{
+it('tolerates 40-second sleep, warns after 90 seconds, and accepts votes during an absence',async()=>{
   await command(0,'mafia_day_start_vote');
-  await db.query("update app_private.players set last_seen_at=now()-interval '40 seconds' where id=$1",[seats[2].id]);
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '40 seconds' where id=$1",[seats[2].id]);
   await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
-  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
-  const stopped=(await db.query<{value:{mafia:{disconnect:{missing_ids:string[]};phase:string}}}>('select app_private.room_dto($1,$2) value',[roomId,seats[0].id])).rows[0].value;
-  expect(stopped.mafia.disconnect.missing_ids).toContain(seats[2].id);
-  await rejected(0,'mafia_day_vote',{target_id:seats[1].id},/ROUND_PAUSED/);
-  await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[2].id]);
+  const dto=async()=>(await db.query<{value:{mafia:{disconnect:{missing_ids:string[]}|null;phase:string};players:{id:string;connected:boolean}[]}}>('select app_private.room_dto($1,$2) value',[roomId,seats[0].id])).rows[0].value;
+  expect((await dto()).mafia.disconnect).toBeNull();
+  expect((await dto()).players.find(p=>p.id===seats[2].id)?.connected).toBe(true);
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[2].id]);
   await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
   expect((await phase()).phase).toBe('DAY_VOTE');
+  expect((await dto()).mafia.disconnect?.missing_ids).toContain(seats[2].id);
   await command(0,'mafia_day_vote',{target_id:seats[1].id});
+  expect((await db.query<{n:number}>('select count(*)::int n from app_private.mafia_day_votes where round_id=$1',[roundId])).rows[0].n).toBe(1);
+  await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[2].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  expect((await dto()).mafia.disconnect).toBeNull();
+  expect((await phase()).phase).toBe('DAY_VOTE');
 });
 
-it('lets the connected host extend a paused game or cancel after its reconnect grace',async()=>{
-  await db.query("update app_private.players set last_seen_at=now()-interval '40 seconds' where id=$1",[seats[3].id]);
+it('actually records a command even when a participant has just become offline',async()=>{
+  await command(0,'mafia_day_start_vote');
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[2].id]);
+  await command(0,'mafia_day_vote',{target_id:seats[1].id});
+  expect((await db.query<{n:number}>('select count(*)::int n from app_private.mafia_day_votes where round_id=$1',[roundId])).rows[0].n).toBe(1);
+  expect((await phase()).phase).toBe('DAY_VOTE');
+});
+
+it('lets the connected host extend waiting or cancel after its reconnect grace',async()=>{
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[3].id]);
   await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
   await rejected(1,'mafia_cancel_round',{},/HOST_ONLY/);
   await rejected(0,'mafia_cancel_round',{},/RECONNECT_GRACE/);
   await db.query("update app_private.mafia_rounds set disconnect_grace_until=now()-interval '1 second' where id=$1",[roundId]);
   await command(0,'mafia_wait_reconnect');
-  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
   await rejected(0,'mafia_cancel_round',{},/RECONNECT_GRACE/);
   await db.query("update app_private.mafia_rounds set disconnect_grace_until=now()-interval '1 second' where id=$1",[roundId]);
   await command(0,'mafia_cancel_round');
@@ -95,21 +108,33 @@ it('lets the connected host extend a paused game or cancel after its reconnect g
   expect(locked).toBe(false);
 });
 
-it('hands a disconnected mafia host to an online surviving participant',async()=>{
-  await db.query("update app_private.players set last_seen_at=now()-interval '70 seconds' where id=$1",[seats[0].id]);
+it('does not cancel a game from an outdated reconnect warning',async()=>{
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[3].id]);
   await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
-  const r=(await db.query<{host_player_id:string}>('select host_player_id from app_private.rooms where id=$1',[roomId])).rows[0];
-  expect(r.host_player_id).toBe(seats[1].id);
-  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+  await db.query("update app_private.mafia_rounds set disconnect_grace_until=now()-interval '1 second' where id=$1",[roundId]);
+  await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[3].id]);
+  await rejected(0,'mafia_cancel_round',{},/PHASE_CONFLICT/);
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
+});
+
+it('hands a disconnected mafia host to an online surviving participant after 120 seconds',async()=>{
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[0].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  const host=async()=>(await db.query<{host_player_id:string}>('select host_player_id from app_private.rooms where id=$1',[roomId])).rows[0].host_player_id;
+  expect(await host()).toBe(seats[0].id);
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '130 seconds' where id=$1",[seats[0].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  expect(await host()).toBe(seats[1].id);
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
 });
 
 it('never delegates an active mafia game to an eliminated participant',async()=>{
   await db.query('update app_private.mafia_round_players set eliminated_at=now() where round_id=$1 and player_id=$2',[roundId,seats[1].id]);
-  await db.query("update app_private.players set last_seen_at=now()-interval '70 seconds' where id=$1 or id=$2 or id=$3",[seats[0].id,seats[2].id,seats[3].id]);
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '130 seconds' where id=$1 or id=$2 or id=$3",[seats[0].id,seats[2].id,seats[3].id]);
   await db.query('select app_private.advance_connectivity($1)',[roomId]);
   const r=(await db.query<{host_player_id:string}>('select host_player_id from app_private.rooms where id=$1',[roomId])).rows[0];
   expect(r.host_player_id).toBe(seats[0].id);
-  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
 });
 
 it('does not reveal how many night power roles are in the room',async()=>{
@@ -119,13 +144,44 @@ it('does not reveal how many night power roles are in the room',async()=>{
   expect(dto.mafia.night_submitted_count).toBeNull();
 });
 
-it('reuses the installed room maintenance routine for automatic pause and resume',async()=>{
-  await db.query("update app_private.players set last_seen_at=now()-interval '40 seconds' where id=$1",[seats[2].id]);
+it('reuses one maintenance routine for non-blocking warnings and recovery',async()=>{
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[2].id]);
   await db.query('select app_private.maintain_rooms()');
-  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
+  const warning=async()=>(await db.query<{disconnect_grace_until:string|null}>('select disconnect_grace_until from app_private.mafia_rounds where id=$1',[roundId])).rows[0].disconnect_grace_until;
+  expect(await warning()).not.toBeNull();
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
   await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[2].id]);
   await db.query('select app_private.maintain_rooms()');
-  expect((await phase()).phase).toBe('DAY_DISCUSS');
+  expect(await warning()).toBeNull();
+});
+
+it('restores a legacy paused round without resetting its submitted votes',async()=>{
+  await command(0,'mafia_day_start_vote');
+  await command(0,'mafia_day_vote',{target_id:seats[1].id});
+  await db.query("update app_private.mafia_rounds set phase='PAUSED_DISCONNECT',disconnect_phase='DAY_VOTE',disconnect_grace_until=now() where id=$1",[roundId]);
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[2].id]);
+  await db.query('select app_private.maintain_rooms()');
+  expect((await phase()).phase).toBe('DAY_VOTE');
+  expect((await db.query<{n:number}>('select count(*)::int n from app_private.mafia_day_votes where round_id=$1',[roundId])).rows[0].n).toBe(1);
+});
+
+it('cleans expired mafia rounds with night, vote and traitor target references before deleting their room',async()=>{
+  await db.query("update app_private.mafia_round_players set role='traitor',original_role='traitor',mission_target_id=$3 where round_id=$1 and player_id=$2",[roundId,seats[2].id,seats[1].id]);
+  await db.query("insert into app_private.mafia_night_actions(round_id,night_no,actor_id,kind,target_id) values($1,1,$2,'mafia',$3)",[roundId,seats[0].id,seats[1].id]);
+  await db.query('insert into app_private.mafia_day_votes(round_id,day_no,ballot,voter_id,target_id) values($1,1,1,$2,$3)',[roundId,seats[3].id,seats[1].id]);
+  const other=(await db.query<{value:{room_id:string}}>("select public.room_create($1,$1,$2,$3) value",['다른방','a'.repeat(64),'b'.repeat(64)])).rows[0].value.room_id;
+  await db.query("update app_private.rooms set status='closed',closed_at=now() where id=$1",[roomId]);
+  await db.exec('savepoint old_cleanup;');
+  try {
+    await expect(db.query('select app_private.maintain_rooms_before_mafia_reconnect()')).rejects.toThrow(/foreign key|violates/i);
+  } finally {
+    await db.exec('rollback to savepoint old_cleanup; release savepoint old_cleanup;');
+  }
+  await db.query('select app_private.maintain_rooms()');
+  expect((await db.query('select id from app_private.rooms where id=$1',[roomId])).rows).toHaveLength(0);
+  expect((await db.query('select id from app_private.mafia_rounds where id=$1',[roundId])).rows).toHaveLength(0);
+  expect((await db.query('select id from app_private.players where room_id=$1',[roomId])).rows).toHaveLength(0);
+  expect((await db.query('select id from app_private.rooms where id=$1',[other])).rows).toHaveLength(1);
 });
 
 it('allows only the host to start, validates secret votes and ends on last mafia elimination',async()=>{

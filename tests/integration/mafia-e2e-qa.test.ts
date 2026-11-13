@@ -132,13 +132,28 @@ it('D/G: concurrent stale ballot is rejected without duplicate vote',async()=>{
   expect(count).toBe(2);
 });
 
-it('C: paused game blocks commands, restores NIGHT after reconnect',async()=>{
+it('C: an offline citizen never blocks required night actions',async()=>{
   await start(['mafia','police','doctor','citizen','citizen','citizen']);
-  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '40 seconds' where id=$1",[seats[4].id]);
-  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
-  expect((await phase()).phase).toBe('PAUSED_DISCONNECT');
-  await rejected(0,'mafia_night_action',{target_id:seats[5].id},/ROUND_PAUSED/);
-  await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[4].id]);
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[4].id]);
   await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
   expect((await phase()).phase).toBe('NIGHT');
+  await command(0,'mafia_night_action',{target_id:seats[5].id});
+  await command(1,'mafia_night_action',{target_id:seats[0].id});
+  await command(2,'mafia_night_action',{target_id:seats[5].id});
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
+  await command(0,'mafia_day_start_vote');
+  expect((await phase()).phase).toBe('DAY_VOTE');
+});
+
+it('C: a missing special role can return without blocking other night submissions',async()=>{
+  await start(['mafia','police','doctor','citizen','citizen','citizen']);
+  await db.query("update app_private.players set last_seen_at=clock_timestamp()-interval '100 seconds' where id=$1",[seats[2].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  await command(0,'mafia_night_action',{target_id:seats[5].id});
+  await command(1,'mafia_night_action',{target_id:seats[0].id});
+  expect((await phase()).phase).toBe('NIGHT');
+  await db.query('update app_private.players set last_seen_at=clock_timestamp() where id=$1',[seats[2].id]);
+  await db.query('select app_private.advance_mafia_connectivity($1)',[roomId]);
+  await command(2,'mafia_night_action',{target_id:seats[5].id});
+  expect((await phase()).phase).toBe('DAY_DISCUSS');
 });
